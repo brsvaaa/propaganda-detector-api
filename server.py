@@ -9,6 +9,10 @@ from flask import Flask, request, jsonify
 from google.colab import drive
 import os
 from dotenv import load_dotenv
+import tf_keras as keras
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 #health check
 app = Flask(__name__)
