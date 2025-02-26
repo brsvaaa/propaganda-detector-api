@@ -6,10 +6,10 @@ from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification, R
 from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify
-from google.colab import drive
 import os
 from dotenv import load_dotenv
 import tf_keras as keras
+from google.cloud import storage
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -28,22 +28,74 @@ if __name__ == '__main__':
 # Загружаем переменные из .env
 load_dotenv()
 
-# Теперь можно использовать os.getenv() для доступа к переменным
-XLNET_MODEL_PATH = os.getenv("XLNET_MODEL_PATH")
-ROBERTA_MODEL_PATH = os.getenv("ROBERTA_MODEL_PATH")
-KERAS_MODEL_PATH = os.getenv("KERAS_MODEL_PATH")
-LABEL_ENCODER_PATH = os.getenv("LABEL_ENCODER_PATH")
-TFIDF_VECTORIZER_PATH = os.getenv("TFIDF_VECTORIZER_PATH")
+# GCS Bucket Configuration
+BUCKET_NAME = "propdetector-models"  # Replace with your actual GCS bucket name
+MODEL_DIR = "models"  # Local directory to store downloaded models
 
-APPEAL_TO_AUTHORITY_MODEL_PATH = os.getenv("APPEAL_TO_AUTHORITY_MODEL_PATH")
-BANDWAGON_MODEL_PATH = os.getenv("BANDWAGON_MODEL_PATH")
-BLACK_WHITE_FALLACY_MODEL_PATH = os.getenv("BLACK_WHITE_FALLACY_MODEL_PATH")
-CAUSAL_OVERSIMPLIFICATION_MODEL_PATH = os.getenv("CAUSAL_OVERSIMPLIFICATION_MODEL_PATH")
-SLOGANS_MODEL_PATH = os.getenv("SLOGANS_MODEL_PATH")
-THOUGHT_TERMINATING_CLICHES_MODEL_PATH = os.getenv("THOUGHT_TERMINATING_CLICHES_MODEL_PATH")
+# Ensure the local model directory exists
+os.makedirs(MODEL_DIR, exist_ok=True)
 
-# Подключение Google Drive (если модели хранятся там)
-drive.mount('/content/drive')
+# Initialize Flask app
+app = Flask(__name__)
+
+# Google Cloud Storage Client
+storage_client = storage.Client()
+
+# List of models to download
+MODEL_FILES = [
+    "Appeal_to_Authority_model.keras",
+    "Bandwagon_Reductio_ad_hitlerum_model.keras",
+    "Black-and-White_Fallacy_model.keras",
+    "Causal_Oversimplification_model.keras",
+    "Slogans_model.keras",
+    "Thought-terminating_Cliches_model.keras",
+    "text_classification_model.keras",
+    "vectorizer.joblib",
+    "label_encoder.joblib"
+]
+
+# Download models from GCS if not present locally
+def download_from_gcs(blob_name, destination_file):
+    """Downloads a file from GCS to the local directory if it doesn't exist."""
+    local_path = os.path.join(MODEL_DIR, destination_file)
+    if not os.path.exists(local_path):
+        print(f"Downloading {blob_name} from GCS...")
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(blob_name)
+        blob.download_to_filename(local_path)
+        print(f"✅ Downloaded {blob_name} to {local_path}")
+    else:
+        print(f"✔ {blob_name} already exists locally.")
+
+# Download all required models
+for model_file in MODEL_FILES:
+    download_from_gcs(model_file, model_file)
+
+# Load Models into Memory
+print("🔄 Loading models...")
+
+# Load Vectorizer & Label Encoder
+tfidf_vectorizer = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
+label_encoder = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
+
+# Load TensorFlow & PyTorch Models
+keras_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
+authority_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
+bandwagon_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
+black_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
+causal_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
+slogans_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
+thought_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
+
+# Load Transformers Models
+xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
+roberta_model_path = os.path.join(MODEL_DIR, "roberta_trained_model")
+
+xlnet_tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+xlnet_model = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
+
+roberta_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
 
 # =========================
 # 1️⃣ Настройка spaCy для разбиения текста
@@ -55,27 +107,7 @@ def split_sentences(text):
     doc = nlp(text)
     return [sent.text.strip() for sent in doc.sents]
 
-# =========================
-# 2️⃣ Загрузка обученных моделей
-# =========================
 
-# Загрузка XLNet
-xlnet_model_path = '/content/drive/MyDrive/xlnet_trained_model2'
-xlnet_tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
-xlnet_model = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
-
-# Загрузка RoBERTa
-roberta_model_path = '/content/drive/MyDrive/roberta_trained_model'
-roberta_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path, from_pt=True)
-
-# Загрузка TensorFlow.keras модели
-keras_model_path = '/content/drive/MyDrive/text_classification_model.keras'
-keras_model = tf.keras.models.load_model(keras_model_path)
-
-# Загрузка TF-IDF векторизатора
-tfidf_path = '/content/drive/MyDrive/vectorizer.joblib'
-tfidf_vectorizer = joblib.load(tfidf_path)
 
 # =========================
 # 3️⃣ Функции для предсказаний
