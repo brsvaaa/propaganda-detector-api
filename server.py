@@ -1,7 +1,3 @@
-# Установка необходимых библиотек (если не установлены)
-!pip install transformers safetensors scikit-learn tensorflow keras spacy --upgrade
-!python -m spacy download en_core_web_sm  # Загружаем английскую модель spaCy
-
 # Импорт библиотек
 import spacy
 import tensorflow as tf
