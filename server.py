@@ -11,6 +11,25 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify
 from google.colab import drive
+import os
+from dotenv import load_dotenv
+
+# Загружаем переменные из .env
+load_dotenv()
+
+# Теперь можно использовать os.getenv() для доступа к переменным
+XLNET_MODEL_PATH = os.getenv("XLNET_MODEL_PATH")
+ROBERTA_MODEL_PATH = os.getenv("ROBERTA_MODEL_PATH")
+KERAS_MODEL_PATH = os.getenv("KERAS_MODEL_PATH")
+LABEL_ENCODER_PATH = os.getenv("LABEL_ENCODER_PATH")
+TFIDF_VECTORIZER_PATH = os.getenv("TFIDF_VECTORIZER_PATH")
+
+APPEAL_TO_AUTHORITY_MODEL_PATH = os.getenv("APPEAL_TO_AUTHORITY_MODEL_PATH")
+BANDWAGON_MODEL_PATH = os.getenv("BANDWAGON_MODEL_PATH")
+BLACK_WHITE_FALLACY_MODEL_PATH = os.getenv("BLACK_WHITE_FALLACY_MODEL_PATH")
+CAUSAL_OVERSIMPLIFICATION_MODEL_PATH = os.getenv("CAUSAL_OVERSIMPLIFICATION_MODEL_PATH")
+SLOGANS_MODEL_PATH = os.getenv("SLOGANS_MODEL_PATH")
+THOUGHT_TERMINATING_CLICHES_MODEL_PATH = os.getenv("THOUGHT_TERMINATING_CLICHES_MODEL_PATH")
 
 # Подключение Google Drive (если модели хранятся там)
 drive.mount('/content/drive')
