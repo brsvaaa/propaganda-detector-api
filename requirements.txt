@@ -16,3 +16,4 @@ tokenizers==0.21.0
 requests==2.32.3
 sentencepiece==0.2.0
 tf-keras
+google-cloud-storage
