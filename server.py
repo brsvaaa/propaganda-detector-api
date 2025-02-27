@@ -7,7 +7,6 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify
 import os
-from dotenv import load_dotenv
 import tf_keras as keras
 from google.cloud import storage
 
@@ -25,8 +24,6 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 
 
-# Загружаем переменные из .env
-load_dotenv()
 
 # GCS Bucket Configuration
 BUCKET_NAME = "propdetector-models"  # Replace with your actual GCS bucket name
