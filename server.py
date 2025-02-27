@@ -10,20 +10,6 @@ import os
 import tf_keras as keras
 from google.cloud import storage
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-
-#health check
-app = Flask(__name__)
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "ok"}), 200
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-
-
 
 # GCS Bucket Configuration
 BUCKET_NAME = "propdetector-models"  # Replace with your actual GCS bucket name
@@ -32,8 +18,22 @@ MODEL_DIR = "models"  # Local directory to store downloaded models
 # Ensure the local model directory exists
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+# Set TensorFlow logging level
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 # Initialize Flask app
 app = Flask(__name__)
+
+# Health check route
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
+if __name__ == '__main__':
+    # Use the PORT assigned by Render (default to 5000 if not set)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
+
 
 # Google Cloud Storage Client
 storage_client = storage.Client()
