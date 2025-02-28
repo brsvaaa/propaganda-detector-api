@@ -172,9 +172,6 @@ from flask_cors import cross_origin
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def predict():
-    # your existing code
-
-def predict():
     """API-метод для предсказания."""
     data = request.get_json()
     text = data.get("text", "")
