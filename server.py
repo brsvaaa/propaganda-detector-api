@@ -167,9 +167,13 @@ def ensemble_multiclass_predict(text):
 # =========================
 # 4️⃣ Запуск Flask API
 # =========================
-app = Flask(__name__)
+from flask_cors import cross_origin
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST', 'OPTIONS'])
+@cross_origin()
+def predict():
+    # your existing code
+
 def predict():
     """API-метод для предсказания."""
     data = request.get_json()
