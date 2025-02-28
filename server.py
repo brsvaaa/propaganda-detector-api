@@ -9,6 +9,11 @@ from flask import Flask, request, jsonify
 import os
 import tf_keras as keras
 from google.cloud import storage
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app)  # This enables CORS for all routes by default
+
 
 
 # GCS Bucket Configuration
