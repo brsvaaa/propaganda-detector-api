@@ -17,7 +17,7 @@ CORS(app)  # This enables CORS for all routes by default
 
 
 # GCS Bucket Configuration
-BUCKET_NAME = "propdetector-models"  # Replace with your actual GCS bucket name
+BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
 MODEL_DIR = "models"  # Local directory to store downloaded models
 
 # Ensure the local model directory exists
