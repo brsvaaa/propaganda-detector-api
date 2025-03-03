@@ -170,6 +170,8 @@ from flask_cors import cross_origin
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def predict():
+    return jsonify({"message": "Endpoint working."})
+    '''
     """API-метод для предсказания."""
     data = request.get_json()
     text = data.get("text", "")
@@ -190,6 +192,6 @@ def predict():
         })
 
     return jsonify({"results": results})
-
+    '''
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
