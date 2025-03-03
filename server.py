@@ -36,7 +36,6 @@ def health_check():
 
 storage_client = storage.Client(project='iconic-market-452120-a0')
 buckets = list(storage_client.list_buckets())
-print([bucket.name for bucket in buckets])
 
 # List of models to download
 MODEL_FILES = [
