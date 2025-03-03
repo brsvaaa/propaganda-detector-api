@@ -26,8 +26,6 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 # Set TensorFlow logging level
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# Initialize Flask app
-app = Flask(__name__)
 
 # Health check route
 @app.route('/health', methods=['GET'])
