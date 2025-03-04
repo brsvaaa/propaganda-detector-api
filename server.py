@@ -32,7 +32,7 @@ def health_check():
 
 # The heavy initialization code is commented out for now.
 # This will allow the /health endpoint to respond quickly.
-'''
+
 def init_models():
     # Google Cloud Storage Client
     storage_client = storage.Client(project='iconic-market-452120-a0')
@@ -160,7 +160,7 @@ def ensemble_multiclass_predict(text):
     avg_probs = (p_xlnet + p_roberta + p_keras) / 3
     final_prediction = np.argmax(avg_probs, axis=1)
     return final_prediction[0], avg_probs
-'''
+
 # =========================
 # Запуск Flask API
 # =========================
@@ -172,7 +172,7 @@ def predict():
     # For now, return a simple message.
     return jsonify({"message": "Endpoint working."})
     # Uncomment the block below for actual prediction logic.
-    """
+    
     data = request.get_json()
     text = data.get("text", "")
     if not text:
@@ -186,7 +186,7 @@ def predict():
             "Multiclass Prediction": multiclass_prediction,
         })
     return jsonify({"results": results})
-    """
+    
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
