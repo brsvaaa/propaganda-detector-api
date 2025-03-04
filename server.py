@@ -29,8 +29,10 @@ CORS(app)  # This enables CORS for all routes by default
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok"}), 200
+
+# The heavy initialization code is commented out for now.
+# This will allow the /health endpoint to respond quickly.
 '''
-# Heavy Initialization Function: Download and load models in the background
 def init_models():
     # Google Cloud Storage Client
     storage_client = storage.Client(project='iconic-market-452120-a0')
@@ -49,7 +51,7 @@ def init_models():
     ]
     
     def download_from_gcs(blob_name, destination_file):
-        """Downloads a file from GCS to the local directory if it doesn't exist."""
+        \"\"\"Downloads a file from GCS to the local directory if it doesn't exist.\"\"\"
         local_path = os.path.join(MODEL_DIR, destination_file)
         if not os.path.exists(local_path):
             print(f"Downloading {blob_name} from GCS...")
@@ -94,6 +96,7 @@ def init_models():
 
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
+'''
 
 # =========================
 # Настройка spaCy для разбиения текста
@@ -157,7 +160,7 @@ def ensemble_multiclass_predict(text):
     avg_probs = (p_xlnet + p_roberta + p_keras) / 3
     final_prediction = np.argmax(avg_probs, axis=1)
     return final_prediction[0], avg_probs
-'''
+
 # =========================
 # Запуск Flask API
 # =========================
@@ -166,9 +169,10 @@ from flask_cors import cross_origin
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def predict():
+    # For now, return a simple message.
     return jsonify({"message": "Endpoint working."})
-'''   
-    # Actual prediction logic is commented out for now.
+    # Uncomment the block below for actual prediction logic.
+    """
     data = request.get_json()
     text = data.get("text", "")
     if not text:
@@ -182,11 +186,12 @@ def predict():
             "Multiclass Prediction": multiclass_prediction,
         })
     return jsonify({"results": results})
-    
+    """
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     print("Starting server on port:", port)
     app.run(host='0.0.0.0', port=port)
+
 
 
