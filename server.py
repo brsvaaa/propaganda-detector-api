@@ -167,7 +167,7 @@ from flask_cors import cross_origin
 @cross_origin()
 def predict():
     return jsonify({"message": "Endpoint working."})
- '''   
+'''   
     # Actual prediction logic is commented out for now.
     data = request.get_json()
     text = data.get("text", "")
