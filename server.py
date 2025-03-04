@@ -1,6 +1,6 @@
 # Импорт библиотек
 import spacy
-import tensorflow as tf
+import tf_keras as keras
 import numpy as np
 from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification, RobertaTokenizer, TFRobertaForSequenceClassification
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -74,13 +74,13 @@ tfidf_vectorizer = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
 label_encoder = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
 
 # Load TensorFlow & PyTorch Models
-keras_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
-authority_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
-bandwagon_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
-black_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
-causal_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
-slogans_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
-thought_model = tf.keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
+keras_model = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
+authority_model = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
+bandwagon_model = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
+black_model = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
+causal_model = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
+slogans_model = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
+thought_model = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
 
 # Load Transformers Models
 xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
