@@ -1,8 +1,10 @@
 # Импорт библиотек
 
 import os
+'''
 # Disable GPU usage by setting CUDA_VISIBLE_DEVICES to an empty string
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
+'''
 # GCS Bucket Configuration
 BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
 MODEL_DIR = "models"  # Local directory to store downloaded models
