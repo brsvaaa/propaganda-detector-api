@@ -18,3 +18,4 @@ sentencepiece==0.2.0
 google-cloud-storage
 flask_cors
 tf-keras
+gunicorn
