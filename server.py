@@ -29,7 +29,7 @@ CORS(app)  # This enables CORS for all routes by default
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok"}), 200
-
+'''
 # Heavy Initialization Function: Download and load models in the background
 def init_models():
     # Google Cloud Storage Client
@@ -167,7 +167,7 @@ from flask_cors import cross_origin
 @cross_origin()
 def predict():
     return jsonify({"message": "Endpoint working."})
-    '''
+    
     # Actual prediction logic is commented out for now.
     data = request.get_json()
     text = data.get("text", "")
@@ -182,7 +182,7 @@ def predict():
             "Multiclass Prediction": multiclass_prediction,
         })
     return jsonify({"results": results})
-    '''
+    
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
