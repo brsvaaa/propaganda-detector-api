@@ -53,7 +53,7 @@ def init_models():
     ]
     
     def download_from_gcs(blob_name, destination_file):
-        \"\"\"Downloads a file from GCS to the local directory if it doesn't exist.\"\"\"
+        "Downloads a file from GCS to the local directory if it doesn't exist."
         local_path = os.path.join(MODEL_DIR, destination_file)
         if not os.path.exists(local_path):
             print(f"Downloading {blob_name} from GCS...")
