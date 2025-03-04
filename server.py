@@ -37,9 +37,14 @@ def health_check():
 def download_folder_from_gcs(bucket, prefix, local_dir):
     """
     Downloads all blobs in GCS with the given prefix (folder) to a local directory.
+    Skips blobs that represent directories.
     """
     blobs = bucket.list_blobs(prefix=prefix)
     for blob in blobs:
+        # Skip blobs that are "directories" (end with a slash)
+        if blob.name.endswith("/"):
+            continue
+
         # Remove the prefix from the blob name to create a relative path.
         relative_path = blob.name[len(prefix):].lstrip("/")
         local_path = os.path.join(local_dir, relative_path)
@@ -47,6 +52,7 @@ def download_folder_from_gcs(bucket, prefix, local_dir):
         print(f"Downloading {blob.name} to {local_path}...")
         blob.download_to_filename(local_path)
     print(f"✅ Folder '{prefix}' downloaded to '{local_dir}'.")
+
     
 def init_models():
     # Google Cloud Storage Client
