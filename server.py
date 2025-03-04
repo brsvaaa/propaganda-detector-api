@@ -34,7 +34,20 @@ def health_check():
 
 # The heavy initialization code is commented out for now.
 # This will allow the /health endpoint to respond quickly.
-
+def download_folder_from_gcs(bucket, prefix, local_dir):
+    """
+    Downloads all blobs in GCS with the given prefix (folder) to a local directory.
+    """
+    blobs = bucket.list_blobs(prefix=prefix)
+    for blob in blobs:
+        # Remove the prefix from the blob name to create a relative path.
+        relative_path = blob.name[len(prefix):].lstrip("/")
+        local_path = os.path.join(local_dir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        print(f"Downloading {blob.name} to {local_path}...")
+        blob.download_to_filename(local_path)
+    print(f"✅ Folder '{prefix}' downloaded to '{local_dir}'.")
+    
 def init_models():
     # Google Cloud Storage Client
     storage_client = storage.Client(project='iconic-market-452120-a0')
@@ -67,6 +80,22 @@ def init_models():
     # Download all required models
     for model_file in MODEL_FILES:
         download_from_gcs(model_file, model_file)
+    
+    # Download model folders for Transformers models
+    bucket = storage_client.bucket(BUCKET_NAME)
+    # Define the folder names as stored in GCS (ensure these match exactly)
+    xlnet_prefix = "xlnet_trained_model/"   # Include trailing slash
+    roberta_prefix = "roberta_trained_model/" # Include trailing slash
+
+    # Local destination directories for the models
+    xlnet_local = os.path.join(MODEL_DIR, "xlnet_trained_model")
+    roberta_local = os.path.join(MODEL_DIR, "roberta_trained_model")
+    
+    os.makedirs(xlnet_local, exist_ok=True)
+    os.makedirs(roberta_local, exist_ok=True)
+    
+    download_folder_from_gcs(bucket, xlnet_prefix, xlnet_local)
+    download_folder_from_gcs(bucket, roberta_prefix, roberta_local)
     
     print("🔄 Loading models...")
     global tfidf_vectorizer, label_encoder
