@@ -96,7 +96,7 @@ def init_models():
 
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
-'''
+
 
 # =========================
 # Настройка spaCy для разбиения текста
@@ -160,7 +160,7 @@ def ensemble_multiclass_predict(text):
     avg_probs = (p_xlnet + p_roberta + p_keras) / 3
     final_prediction = np.argmax(avg_probs, axis=1)
     return final_prediction[0], avg_probs
-
+'''
 # =========================
 # Запуск Flask API
 # =========================
