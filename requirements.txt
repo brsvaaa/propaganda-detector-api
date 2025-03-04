@@ -17,3 +17,4 @@ requests==2.32.3
 sentencepiece==0.2.0
 google-cloud-storage
 flask_cors
+tf-keras
