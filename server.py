@@ -1,4 +1,16 @@
 # Импорт библиотек
+
+import os
+# Disable GPU usage by setting CUDA_VISIBLE_DEVICES to an empty string
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# GCS Bucket Configuration
+BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
+MODEL_DIR = "models"  # Local directory to store downloaded models
+# Ensure the local model directory exists
+os.makedirs(MODEL_DIR, exist_ok=True)
+# Set TensorFlow logging level to 2 to reduce verbosity
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import spacy
 import tf_keras as keras
 import numpy as np
@@ -6,25 +18,11 @@ from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification, R
 from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify
-import os
 from google.cloud import storage
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)  # This enables CORS for all routes by default
-
-
-
-# GCS Bucket Configuration
-BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
-MODEL_DIR = "models"  # Local directory to store downloaded models
-
-# Ensure the local model directory exists
-os.makedirs(MODEL_DIR, exist_ok=True)
-
-# Set TensorFlow logging level
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
 
 # Health check route
 @app.route('/health', methods=['GET'])
