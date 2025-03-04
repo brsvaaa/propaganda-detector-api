@@ -157,7 +157,7 @@ def ensemble_multiclass_predict(text):
     avg_probs = (p_xlnet + p_roberta + p_keras) / 3
     final_prediction = np.argmax(avg_probs, axis=1)
     return final_prediction[0], avg_probs
-
+'''
 # =========================
 # Запуск Flask API
 # =========================
@@ -167,7 +167,7 @@ from flask_cors import cross_origin
 @cross_origin()
 def predict():
     return jsonify({"message": "Endpoint working."})
-    
+ '''   
     # Actual prediction logic is commented out for now.
     data = request.get_json()
     text = data.get("text", "")
