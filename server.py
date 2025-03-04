@@ -20,6 +20,7 @@ import joblib
 from flask import Flask, request, jsonify
 from google.cloud import storage
 from flask_cors import CORS
+import threading
 
 app = Flask(__name__)
 CORS(app)  # This enables CORS for all routes by default
@@ -29,69 +30,73 @@ CORS(app)  # This enables CORS for all routes by default
 def health_check():
     return jsonify({"status": "ok"}), 200
 
-# Google Cloud Storage Client
+# Heavy Initialization Function: Download and load models in the background
+def init_models():
+    # Google Cloud Storage Client
+    storage_client = storage.Client(project='iconic-market-452120-a0')
+    
+    # List of models to download
+    MODEL_FILES = [
+        "Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras",
+        "Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras",
+        "text_classification_model.keras",
+        "vectorizer.joblib",
+        "label_encoder.joblib"
+    ]
+    
+    def download_from_gcs(blob_name, destination_file):
+        """Downloads a file from GCS to the local directory if it doesn't exist."""
+        local_path = os.path.join(MODEL_DIR, destination_file)
+        if not os.path.exists(local_path):
+            print(f"Downloading {blob_name} from GCS...")
+            bucket = storage_client.bucket(BUCKET_NAME)
+            blob = bucket.blob(blob_name)
+            blob.download_to_filename(local_path)
+            print(f"✅ Downloaded {blob_name} to {local_path}")
+        else:
+            print(f"✔ {blob_name} already exists locally.")
+    
+    # Download all required models
+    for model_file in MODEL_FILES:
+        download_from_gcs(model_file, model_file)
+    
+    print("🔄 Loading models...")
+    global tfidf_vectorizer, label_encoder
+    global keras_model, authority_model, bandwagon_model, black_model, causal_model, slogans_model, thought_model
+    global xlnet_tokenizer, xlnet_model, roberta_tokenizer, roberta_model
 
-storage_client = storage.Client(project='iconic-market-452120-a0')
-buckets = list(storage_client.list_buckets())
+    # Load Vectorizer & Label Encoder
+    tfidf_vectorizer = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
+    label_encoder = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
 
-# List of models to download
-MODEL_FILES = [
-    "Appeal_to_Authority_model.keras",
-    "Bandwagon_Reductio_ad_hitlerum_model.keras",
-    "Black-and-White_Fallacy_model.keras",
-    "Causal_Oversimplification_model.keras",
-    "Slogans_model.keras",
-    "Thought-terminating_Cliches_model.keras",
-    "text_classification_model.keras",
-    "vectorizer.joblib",
-    "label_encoder.joblib"
-]
+    # Load Keras models using tf_keras
+    keras_model = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
+    authority_model = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
+    bandwagon_model = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
+    black_model = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
+    causal_model = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
+    slogans_model = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
+    thought_model = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
 
-# Download models from GCS if not present locally
-def download_from_gcs(blob_name, destination_file):
-    """Downloads a file from GCS to the local directory if it doesn't exist."""
-    local_path = os.path.join(MODEL_DIR, destination_file)
-    if not os.path.exists(local_path):
-        print(f"Downloading {blob_name} from GCS...")
-        bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(blob_name)
-        blob.download_to_filename(local_path)
-        print(f"✅ Downloaded {blob_name} to {local_path}")
-    else:
-        print(f"✔ {blob_name} already exists locally.")
+    # Load Transformers models
+    xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
+    roberta_model_path = os.path.join(MODEL_DIR, "roberta_trained_model")
+    xlnet_tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+    xlnet_model = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
+    roberta_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
+    roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
+    
+    print("✅ Models loaded.")
 
-# Download all required models
-for model_file in MODEL_FILES:
-    download_from_gcs(model_file, model_file)
-
-# Load Models into Memory
-print("🔄 Loading models...")
-
-# Load Vectorizer & Label Encoder
-tfidf_vectorizer = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
-label_encoder = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
-
-# Load TensorFlow & PyTorch Models
-keras_model = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
-authority_model = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
-bandwagon_model = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
-black_model = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
-causal_model = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
-slogans_model = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
-thought_model = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
-
-# Load Transformers Models
-xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
-roberta_model_path = os.path.join(MODEL_DIR, "roberta_trained_model")
-
-xlnet_tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
-xlnet_model = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
-
-roberta_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
+# Start heavy initialization in a background thread so that the server starts quickly
+threading.Thread(target=init_models, daemon=True).start()
 
 # =========================
-# 1️⃣ Настройка spaCy для разбиения текста
+# Настройка spaCy для разбиения текста
 # =========================
 nlp = spacy.load("en_core_web_sm")
 
@@ -100,10 +105,8 @@ def split_sentences(text):
     doc = nlp(text)
     return [sent.text.strip() for sent in doc.sents]
 
-
-
 # =========================
-# 3️⃣ Функции для предсказаний
+# Функции для предсказаний
 # =========================
 
 def predict_xlnet(text):
@@ -156,7 +159,7 @@ def ensemble_multiclass_predict(text):
     return final_prediction[0], avg_probs
 
 # =========================
-# 4️⃣ Запуск Flask API
+# Запуск Flask API
 # =========================
 from flask_cors import cross_origin
 
@@ -165,28 +168,25 @@ from flask_cors import cross_origin
 def predict():
     return jsonify({"message": "Endpoint working."})
     '''
-    """API-метод для предсказания."""
+    # Actual prediction logic is commented out for now.
     data = request.get_json()
     text = data.get("text", "")
-
     if not text:
         return jsonify({"error": "No text provided"}), 400
-
-    # Разбиваем текст на предложения с помощью spaCy
     sentences = split_sentences(text)
-
     results = []
     for sentence in sentences:
         multiclass_prediction, multiclass_probs = ensemble_multiclass_predict(sentence)
-        
         results.append({
             "sentence": sentence,
             "Multiclass Prediction": multiclass_prediction,
         })
-
     return jsonify({"results": results})
     '''
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
+    print("Starting server on port:", port)
     app.run(host='0.0.0.0', port=port)
+
 
