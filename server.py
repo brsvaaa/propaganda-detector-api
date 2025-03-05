@@ -2,10 +2,10 @@
 # Импорт библиотек
 
 import os
-'''
+
 # Disable GPU usage by setting CUDA_VISIBLE_DEVICES to an empty string
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-'''
+
 # GCS Bucket Configuration
 BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
 MODEL_DIR = "models"  # Local directory to store downloaded models
@@ -131,10 +131,10 @@ def init_models():
     roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
     
     print("✅ Models loaded.")
-'''
+
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
-'''
+
 
 # =========================
 # Настройка spaCy для разбиения текста
