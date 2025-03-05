@@ -25,7 +25,7 @@ from flask_cors import CORS
 import threading
 
 app = Flask(__name__)
-CORS(app)  # This enables CORS for all routes by default
+CORS(app, resources={r"/predict": {"origins": "*"}}) # This enables CORS for all routes by default
 
 # Health check route
 @app.route('/health', methods=['GET'])
