@@ -130,10 +130,10 @@ def init_models():
     roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
     
     print("✅ Models loaded.")
-
+'''
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
-
+'''
 
 # =========================
 # Настройка spaCy для разбиения текста
@@ -211,10 +211,11 @@ def add_cors_headers(response):
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def predict():
-    # For now, return a simple message.
+    if request.method == "OPTIONS":
+        return jsonify({"message": "Preflight OK"}), 200
     return jsonify({"message": "Endpoint working."})
     # Uncomment the block below for actual prediction logic.
-    
+    '''
     data = request.get_json()
     text = data.get("text", "")
     if not text:
@@ -228,7 +229,7 @@ def predict():
             "Multiclass Prediction": multiclass_prediction,
         })
     return jsonify({"results": results})
-    
+    '''
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
