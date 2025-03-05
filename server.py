@@ -235,10 +235,10 @@ def init_models():
     roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
     
     print("✅ Models loaded.")
-
+'''
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
-
+'''
 
 # =========================
 # Настройка spaCy для разбиения текста
