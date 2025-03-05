@@ -19,3 +19,4 @@ google-cloud-storage
 flask_cors
 tf-keras
 gunicorn
+logging
