@@ -53,7 +53,7 @@ def download_folder_from_gcs(bucket, prefix, local_dir):
         print(f"Downloading {blob.name} to {local_path}...")
         blob.download_to_filename(local_path)
     print(f"✅ Folder '{prefix}' downloaded to '{local_dir}'.")
-    
+ '''   
 logging.basicConfig(level=logging.INFO)
 
 def init_models():
@@ -238,7 +238,7 @@ def init_models():
 
 # Start heavy initialization in a background thread so that the server starts quickly
 threading.Thread(target=init_models, daemon=True).start()
-'''
+
 
 # =========================
 # Настройка spaCy для разбиения текста
