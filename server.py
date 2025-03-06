@@ -360,6 +360,10 @@ def init_models():
         except Exception as e:
             logging.error("Error loading XLNet models: " + str(e))
         logging.info("✅ Models loaded.")
+        # Create a flag file indicating that models are loaded.
+        flag_path = os.path.join(MODEL_DIR, "models_loaded.flag")
+        with open(flag_path, "w") as f:
+            f.write("true")
         models_loaded = True
     except Exception as e:
         logging.error("General error in init_models: " + str(e))
@@ -458,10 +462,15 @@ def predict():
         return jsonify({"message": "Preflight OK"}), 200
     
     logging.info(f"models_loaded flag: {models_loaded}")  # Debugging log
-
+    '''
     if not models_loaded:
         return jsonify({"error": "Models are still loading, please try again later."}), 503
-
+    '''
+    # Check if the flag file exists.
+    flag_path = os.path.join(MODEL_DIR, "models_loaded.flag")
+    if not os.path.exists(flag_path):
+        return jsonify({"error": "Models are still loading, please try again later."}), 503
+    
     try:
         data = request.get_json()
         if data is None:
