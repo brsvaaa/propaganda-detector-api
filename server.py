@@ -422,7 +422,7 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
     return response
-
+'''
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def predict():
@@ -447,6 +447,41 @@ def predict():
                 "Multiclass Prediction": multiclass_prediction,
             })
         return jsonify({"results": results})
+    except Exception as e:
+        logging.error("Error in /predict: " + str(e))
+        return jsonify({"error": "Internal server error"}), 500
+'''
+@app.route('/predict', methods=['POST', 'OPTIONS'])
+@cross_origin()
+def predict():
+    if request.method == "OPTIONS":
+        return jsonify({"message": "Preflight OK"}), 200
+    
+    logging.info(f"models_loaded flag: {models_loaded}")  # Debugging log
+
+    if not models_loaded:
+        return jsonify({"error": "Models are still loading, please try again later."}), 503
+
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Invalid JSON body"}), 400
+
+        text = data.get("text", "")
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        sentences = split_sentences(text)
+        results = []
+        for sentence in sentences:
+            multiclass_prediction, multiclass_probs = ensemble_multiclass_predict(sentence)
+            results.append({
+                "sentence": sentence,
+                "Multiclass Prediction": multiclass_prediction,
+            })
+        
+        return jsonify({"results": results})
+
     except Exception as e:
         logging.error("Error in /predict: " + str(e))
         return jsonify({"error": "Internal server error"}), 500
