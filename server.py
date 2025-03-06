@@ -270,11 +270,14 @@ CORS(app, resources={r"/predict": {"origins": "*"}})
 def health_check():
     return jsonify({"status": "ok"}), 200
 
-# Global flag to check if models have been loaded
+# Global flag to indicate model initialization status
 models_loaded = False
 
 def download_folder_from_gcs(bucket, prefix, local_dir):
-    """Downloads all blobs in GCS with the given prefix (folder) to a local directory."""
+    """
+    Downloads all blobs in GCS with the given prefix (folder) to a local directory.
+    Skips blobs that represent directories.
+    """
     blobs = bucket.list_blobs(prefix=prefix)
     for blob in blobs:
         if blob.name.endswith("/"):
@@ -366,7 +369,7 @@ def init_models():
         except Exception as e:
             logging.error("Error loading Transformers models: " + str(e))
         logging.info("✅ Models loaded.")
-        models_loaded = True  # Set the flag when done
+        models_loaded = True
     except Exception as e:
         logging.error("General error in init_models: " + str(e))
 
@@ -443,7 +446,6 @@ def add_cors_headers(response):
 def predict():
     if request.method == "OPTIONS":
         return jsonify({"message": "Preflight OK"}), 200
-    '''
     # Check if models are loaded
     if not models_loaded:
         return jsonify({"error": "Models are still loading, please try again later."}), 503
@@ -466,9 +468,8 @@ def predict():
     except Exception as e:
         logging.error("Error in /predict: " + str(e))
         return jsonify({"error": "Internal server error"}), 500
-    '''
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     logging.info("Starting server on port: " + str(port))
     app.run(host='0.0.0.0', port=port)
-
