@@ -414,8 +414,6 @@ def add_cors_headers(response):
 
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
-@app.route('/predict', methods=['POST', 'OPTIONS'])
-@cross_origin()
 def predict_endpoint():
     if request.method == "OPTIONS":
         return jsonify({"message": "Preflight OK"}), 200
