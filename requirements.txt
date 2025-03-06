@@ -15,7 +15,6 @@ scipy==1.13.1
 tokenizers==0.21.0
 requests==2.32.3
 sentencepiece==0.2.0
-redis==4.6.0
 google-cloud-storage
 flask_cors
 tf-keras
