@@ -414,6 +414,8 @@ def add_cors_headers(response):
 
 @app.route('/predict', methods=['POST', 'OPTIONS'])
 @cross_origin()
+@app.route('/predict', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def predict_endpoint():
     if request.method == "OPTIONS":
         return jsonify({"message": "Preflight OK"}), 200
@@ -422,6 +424,10 @@ def predict_endpoint():
     flag_path = os.path.join(MODEL_DIR, "models_loaded.flag")
     if not os.path.exists(flag_path):
         return jsonify({"error": "Models are still loading, please try again later."}), 503
+
+    # Also check that critical attributes are not None.
+    if model_manager.xlnet_tokenizer is None or model_manager.xlnet_model is None:
+        return jsonify({"error": "xln models are still loading, please try again later."}), 503
 
     try:
         data = request.get_json()
@@ -442,6 +448,7 @@ def predict_endpoint():
     except Exception as e:
         logging.error("Error in /predict: " + str(e))
         return jsonify({"error": "Internal server error"}), 500
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
