@@ -251,7 +251,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import spacy
 import tf_keras as keras
 import numpy as np
-from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification, RobertaTokenizer, TFRobertaForSequenceClassification
+from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification
 from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify
@@ -323,24 +323,18 @@ def init_models():
         for model_file in MODEL_FILES:
             download_file(model_file, model_file)
         bucket = storage_client.bucket(BUCKET_NAME)
+        # Download folder for XLNet model only
         xlnet_prefix = "xlnet_trained_model/"   # Include trailing slash
-        roberta_prefix = "roberta_trained_model/" # Include trailing slash
         xlnet_local = os.path.join(MODEL_DIR, "xlnet_trained_model")
-        roberta_local = os.path.join(MODEL_DIR, "roberta_trained_model")
         os.makedirs(xlnet_local, exist_ok=True)
-        os.makedirs(roberta_local, exist_ok=True)
         try:
             download_folder_from_gcs(bucket, xlnet_prefix, xlnet_local)
         except Exception as e:
             logging.error(f"Error downloading folder {xlnet_prefix}: {e}")
-        try:
-            download_folder_from_gcs(bucket, roberta_prefix, roberta_local)
-        except Exception as e:
-            logging.error(f"Error downloading folder {roberta_prefix}: {e}")
         logging.info("🔄 Loading models...")
         global tfidf_vectorizer, label_encoder
         global keras_model, authority_model, bandwagon_model, black_model, causal_model, slogans_model, thought_model
-        global xlnet_tokenizer, xlnet_model, roberta_tokenizer, roberta_model
+        global xlnet_tokenizer, xlnet_model
         try:
             tfidf_vectorizer = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
         except Exception as e:
@@ -361,13 +355,10 @@ def init_models():
             logging.error("Error loading Keras models: " + str(e))
         try:
             xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
-            roberta_model_path = os.path.join(MODEL_DIR, "roberta_trained_model")
             xlnet_tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
             xlnet_model = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
-            roberta_tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-            roberta_model = TFRobertaForSequenceClassification.from_pretrained(roberta_model_path)
         except Exception as e:
-            logging.error("Error loading Transformers models: " + str(e))
+            logging.error("Error loading XLNet models: " + str(e))
         logging.info("✅ Models loaded.")
         models_loaded = True
     except Exception as e:
@@ -389,14 +380,7 @@ def predict_xlnet(text):
     """Предсказание для XLNet."""
     inputs = xlnet_tokenizer(text, return_tensors="tf", truncation=True, padding=True)
     logits = xlnet_model(**inputs).logits
-    probs = tf.nn.softmax(logits, axis=1).numpy()
-    return probs
-
-def predict_roberta(text):
-    """Предсказание для RoBERTa."""
-    inputs = roberta_tokenizer(text, return_tensors="tf", truncation=True, padding=True)
-    logits = roberta_model(**inputs).logits
-    probs = tf.nn.softmax(logits, axis=1).numpy()
+    probs = np.array(tf.nn.softmax(logits, axis=1))
     return probs
 
 def pad_vectorized_text(vectorized_text, expected_shape):
@@ -420,14 +404,12 @@ def softmax(x):
     return e_x / e_x.sum(axis=1, keepdims=True)
 
 def ensemble_multiclass_predict(text):
-    """Ансамблевое предсказание для мультиклассовых моделей."""
+    """Ансамблевое предсказание для мультиклассовых моделей using XLNet and Keras only."""
     p_xlnet = predict_xlnet(text)
-    p_roberta = predict_roberta(text)
     p_keras = predict_keras(text)
     p_xlnet = softmax(p_xlnet)
-    p_roberta = softmax(p_roberta)
     p_keras = softmax(p_keras)
-    avg_probs = (p_xlnet + p_roberta + p_keras) / 3
+    avg_probs = (p_xlnet + p_keras) / 2  # Average predictions from XLNet and Keras
     final_prediction = np.argmax(avg_probs, axis=1)
     return final_prediction[0], avg_probs
 
