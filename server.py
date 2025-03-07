@@ -354,7 +354,7 @@ def init_models():
 def get_models():
     if 'models' not in g:
         logging.info("Models not in flask.g; loading now...")
-        g.models = load_models()
+        g.models = init_models()
     return g.models
 # Start heavy initialization in a background thread
 threading.Thread(target=init_models, daemon=True).start()
