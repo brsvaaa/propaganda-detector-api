@@ -280,7 +280,7 @@ def init_models():
         from huggingface_hub import hf_hub_download
         # Mapping filenames to their Hugging Face repo_ids
         hf_repos = {
-            "Appeal_to_Authority_model.keras": "brsvaaa/brsvaaa/Appeal_to_Authority_model.keras",
+            "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
             "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
             "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
             "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
