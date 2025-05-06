@@ -284,7 +284,7 @@ def init_models():
             "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
             "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
             "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
-            "Slogans_model.keras": "brsvaaa/slogans-model",
+            "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
             "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
             "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
             "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
