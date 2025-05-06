@@ -248,7 +248,6 @@ from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification
 from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
 from flask import Flask, request, jsonify, g
-from google.cloud import storage
 from flask_cors import CORS, cross_origin
 import threading
 import logging
@@ -263,91 +262,58 @@ CORS(app, resources={r"/predict": {"origins": "*"}})
 def health_check():
     return jsonify({"status": "ok", "models_loaded": "models" in g}), 200
 
-def download_folder_from_gcs(bucket, prefix, local_dir):
-    """
-    Downloads all blobs in GCS with the given prefix (folder) to a local directory.
-    Skips blobs that represent directories.
-    """
-    blobs = bucket.list_blobs(prefix=prefix)
-    for blob in blobs:
-        if blob.name.endswith("/"):
-            continue
-        relative_path = blob.name[len(prefix):].lstrip("/")
-        local_path = os.path.join(local_dir, relative_path)
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        logging.info(f"Downloading {blob.name} to {local_path}...")
+def download_from_huggingface(repo_url, filename):
+    dest_path = os.path.join(MODEL_DIR, filename)
+    if not os.path.exists(dest_path):
         try:
-            blob.download_to_filename(local_path)
+            logging.info(f"Downloading {filename} from Hugging Face...")
+            urllib.request.urlretrieve(f"{repo_url}/{filename}", dest_path)
+            logging.info(f"✅ Downloaded {filename} to {dest_path}")
         except Exception as e:
-            logging.error(f"Error downloading {blob.name}: {e}")
-    logging.info(f"✅ Folder '{prefix}' downloaded to '{local_dir}'.")
+            logging.error(f"Error downloading {filename} from HF: {e}")
+    else:
+        logging.info(f"✔ {filename} already exists locally.")
 
 def init_models():
     try:
         models = {}
-        storage_client = storage.Client(project='iconic-market-452120-a0')
-        MODEL_FILES = [
-            "Appeal_to_Authority_model.keras",
-            "Bandwagon_Reductio_ad_hitlerum_model.keras",
-            "Black-and-White_Fallacy_model.keras",
-            "Causal_Oversimplification_model.keras",
-            "Slogans_model.keras",
-            "Thought-terminating_Cliches_model.keras",
-            "text_classification_model.keras",
-            "vectorizer.joblib",
-            "label_encoder.joblib"
-        ]
-        def download_file(blob_name, destination_file):
-            local_path = os.path.join(MODEL_DIR, destination_file)
-            if not os.path.exists(local_path):
-                try:
-                    logging.info(f"Downloading {blob_name} from GCS...")
-                    bucket = storage_client.bucket(BUCKET_NAME)
-                    blob = bucket.blob(blob_name)
-                    blob.download_to_filename(local_path)
-                    logging.info(f"✅ Downloaded {blob_name} to {local_path}")
-                except Exception as e:
-                    logging.error(f"Error downloading {blob_name}: {e}")
-            else:
-                logging.info(f"✔ {blob_name} already exists locally.")
-        for model_file in MODEL_FILES:
-            download_file(model_file, model_file)
-        bucket = storage_client.bucket(BUCKET_NAME)
-        # Download folder for XLNet model only
-        xlnet_prefix = "xlnet_trained_model/"   # Include trailing slash
-        xlnet_local = os.path.join(MODEL_DIR, "xlnet_trained_model")
-        os.makedirs(xlnet_local, exist_ok=True)
-        try:
-            download_folder_from_gcs(bucket, xlnet_prefix, xlnet_local)
-        except Exception as e:
-            logging.error(f"Error downloading folder {xlnet_prefix}: {e}")
-        logging.info("🔄 Loading models...")
-        try:
-            models['tfidf_vectorizer'] = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
-        except Exception as e:
-            logging.error("Error loading vectorizer: " + str(e))
-        try:
-            models['label_encoder'] = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
-        except Exception as e:
-            logging.error("Error loading label_encoder: " + str(e))
-        try:
-            models['keras_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
-            models['authority_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
-            models['bandwagon_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
-            models['black_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
-            models['causal_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
-            models['slogans_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
-            models['thought_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
-        except Exception as e:
-            logging.error("Error loading Keras models: " + str(e))
-        try:
-            xlnet_model_path = os.path.join(MODEL_DIR, "xlnet_trained_model")
-            models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
-            models['xlnet_model'] = TFAutoModelForSequenceClassification.from_pretrained(xlnet_model_path)
-        except Exception as e:
-            logging.error("Error loading XLNet models: " + str(e))
-        logging.info("✅ Models loaded.")
+        from huggingface_hub import hf_hub_download
+        # Mapping filenames to their Hugging Face repo_ids
+        hf_repos = {
+            "Appeal_to_Authority_model.keras": "brsvaaa/brsvaaa/Appeal_to_Authority_model.keras",
+            "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
+            "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
+            "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
+            "Slogans_model.keras": "brsvaaa/slogans-model",
+            "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
+            "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
+            "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
+            "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
+        }
+        # Download each traditional asset from its respective repo
+        for filename, repo_id in hf_repos.items():
+            local_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=MODEL_DIR)
+            logging.info(f"✅ Downloaded {filename} from {repo_id} to {local_path}")
+        # Load traditional assets
+        models['tfidf_vectorizer'] = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
+        models['label_encoder'] = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
+        # Load Keras models
+        models['keras_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
+        models['authority_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
+        models['bandwagon_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
+        models['black_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
+        models['causal_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
+        models['slogans_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
+        models['thought_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
+        # Load Transformers models directly by repo
+        models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("your-username/xlnet-transformer-model")
+        models['xlnet_model'] = TFAutoModelForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
+        logging.info("✅ Models loaded from Hugging Face.")
         return models
+    except Exception as e:
+        logging.error(f"General error in init_models: {e}")
+    except Exception as e:
+        logging.error(f"General error in init_models: {e}")
     except Exception as e:
         logging.error("General error in init_models: " + str(e))
 
