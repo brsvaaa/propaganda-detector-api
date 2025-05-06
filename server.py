@@ -295,7 +295,7 @@ def init_models():
             local_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=MODEL_DIR)
             logging.info(f"✅ Downloaded {filename} from {repo_id} to {local_path}")
         # Load traditional assets
-        models['tfidf_vectorizer'] = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
+        models['vectorizer.joblib'] = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
         models['label_encoder'] = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
         # Load Keras models
         models['keras_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
@@ -351,7 +351,7 @@ def pad_vectorized_text(vectorized_text, expected_shape):
 
 def predict_keras(text):
     """Предсказание для модели Keras."""
-    vectorized_text = models['tfidf_vectorizer'].transform([text]).toarray()
+    vectorized_text = models['vectorizer.joblib'].transform([text]).toarray()
     vectorized_text = pad_vectorized_text(vectorized_text, 15396)
     probs = models['keras_model'].predict(vectorized_text)
     return probs
