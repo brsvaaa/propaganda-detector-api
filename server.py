@@ -318,15 +318,14 @@ def init_models():
     models['label_encoder']  = joblib.load(local_paths["label_encoder.joblib"])
 
     # 3) Загружаем Keras-модели
-    def load_keras_model_from(path_key):
-        p = local_paths[path_key]
+    def load_keras_model_from(key):
+        p = local_paths[key]
         return keras.models.load_model(
             p,
             custom_objects={
-                # Класс Functional внутри вашего .keras файла
-                "Functional": tf.keras.Model,
-                # Подпомогаем InputLayer
-                "InputLayer": tf.keras.layers.InputLayer
+                # здесь keras — это ваш alias tf_keras
+                "Functional": keras.models.Model,
+                "InputLayer": keras.layers.InputLayer
             },
             compile=False
         )
