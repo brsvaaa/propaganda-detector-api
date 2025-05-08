@@ -275,38 +275,38 @@ def download_from_huggingface(repo_url, filename):
         logging.info(f"✔ {filename} already exists locally.")
 
 def init_models():
-    try:
-        models = {}
-        local_paths = {}  # сюда сохраним реальные пути к файлам
-        from huggingface_hub import hf_hub_download, HfHubHTTPError
-        # Mapping filenames to their Hugging Face repo_ids
-        hf_repos = {
-            "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
-            "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
-            "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
-            "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
-            "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
-            "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
-            "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
-            "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
-            "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
-        }
-        for filename, repo_id in hf_repos.items():
-            try:
-                path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename=filename,
-                    cache_dir=MODEL_DIR,
-                    repo_type="model"
-                )
-                local_paths[filename] = path
-                logging.info(f"✅ {filename} скачан в {path}")
-            except HfHubHTTPError as e:
-                logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
-                raise
-            except Exception as e:
-                logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
-                raise
+    models = {}
+    local_paths = {}  # сюда сохраним реальные пути к файлам
+    from huggingface_hub import hf_hub_download, HfHubHTTPError
+    # Mapping filenames to their Hugging Face repo_ids
+    hf_repos = {
+        "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
+        "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
+        "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
+        "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
+        "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
+    }
+    
+    for filename, repo_id in hf_repos.items():
+        try:
+            path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                cache_dir=MODEL_DIR,
+                repo_type="model"
+            )
+            local_paths[filename] = path
+            logging.info(f"✅ {filename} скачан в {path}")
+        except HfHubHTTPError as e:
+            logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
+            raise
 
     # 2) Загружаем vectorizer и encoder по реальным путям
     models['vectorizer.joblib'] = joblib.load(local_paths["vectorizer.joblib"])
