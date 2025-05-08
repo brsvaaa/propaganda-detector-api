@@ -352,7 +352,7 @@ def init_models():
     models['thought_model']   = load_keras_model_from("Thought-terminating_Cliches_model.keras")
 
     # 4) Загружаем XLNet-трансформер
-    models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("brsvaaa/xlnet_trained_model")
+    models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_model']     = TFAutoModelForSequenceClassification.from_pretrained(
         "brsvaaa/xlnet_trained_model",
         cache_dir=MODEL_DIR
