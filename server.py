@@ -320,7 +320,16 @@ def init_models():
     # 3) Загружаем Keras-модели
     def load_keras_model_from(path_key):
         p = local_paths[path_key]
-        return keras.models.load_model(p)
+        return keras.models.load_model(
+            p,
+            custom_objects={
+                # Класс Functional внутри вашего .keras файла
+                "Functional": tf.keras.Model,
+                # Подпомогаем InputLayer
+                "InputLayer": tf.keras.layers.InputLayer
+            },
+            compile=False
+        )
 
     models['keras_model']     = load_keras_model_from("text_classification_model.keras")
     models['authority_model'] = load_keras_model_from("Appeal_to_Authority_model.keras")
