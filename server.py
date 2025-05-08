@@ -241,7 +241,6 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 import spacy
-import tf_keras as keras
 import numpy as np
 from transformers import XLNetTokenizer, TFAutoModelForSequenceClassification
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -251,6 +250,11 @@ from flask_cors import CORS, cross_origin
 import threading
 import logging
 import urllib
+import torch
+import torch.nn.functional as F
+import keras 
+from keras.layers import InputLayer
+from keras.models import load_model
 
 logging.basicConfig(level=logging.INFO)
 
@@ -275,9 +279,12 @@ def download_from_huggingface(repo_url, filename):
         logging.info(f"✔ {filename} already exists locally.")
         
 # -------------------------------------------------------------------
-class CustomInputLayer(keras.layers.InputLayer):
+class CustomInputLayer(InputLayer):
     def __init__(self, **kwargs):
-        kwargs.pop("batch_shape", None)
+        batch_shape = kwargs.pop('batch_shape', None)
+        if batch_shape is not None:
+            # batch_shape = [None, dim1, dim2, ...]
+            kwargs.setdefault('input_shape', tuple(batch_shape[1:]))
         super().__init__(**kwargs)
         
 def init_models():
