@@ -292,21 +292,21 @@ def init_models():
             "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
         }
         for filename, repo_id in hf_repos.items():
-        try:
-            path = hf_hub_download(
-                repo_id=repo_id,
-                filename=filename,
-                cache_dir=MODEL_DIR,
-                repo_type="model"
-            )
-            local_paths[filename] = path
-            logging.info(f"✅ {filename} скачан в {path}")
-        except HfHubHTTPError as e:
-            logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
-            raise
-        except Exception as e:
-            logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
-            raise
+            try:
+                path = hf_hub_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    cache_dir=MODEL_DIR,
+                    repo_type="model"
+                )
+                local_paths[filename] = path
+                logging.info(f"✅ {filename} скачан в {path}")
+            except HfHubHTTPError as e:
+                logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
+                raise
+            except Exception as e:
+                logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
+                raise
 
     # 2) Загружаем vectorizer и encoder по реальным путям
     models['tfidf_vectorizer'] = joblib.load(local_paths["vectorizer.joblib"])
