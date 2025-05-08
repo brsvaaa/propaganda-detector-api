@@ -273,7 +273,13 @@ def download_from_huggingface(repo_url, filename):
             logging.error(f"Error downloading {filename} from HF: {e}")
     else:
         logging.info(f"✔ {filename} already exists locally.")
-
+        
+# -------------------------------------------------------------------
+class CustomInputLayer(keras.layers.InputLayer):
+    def __init__(self, **kwargs):
+        kwargs.pop("batch_shape", None)
+        super().__init__(**kwargs)
+        
 def init_models():
     from huggingface_hub import hf_hub_download
     try:
@@ -325,7 +331,7 @@ def init_models():
             custom_objects={
                 # здесь keras — это ваш alias tf_keras
                 "Functional": keras.models.Model,
-                "InputLayer": keras.layers.InputLayer
+                "InputLayer": CustomInputLayer
             },
             compile=False
         )
