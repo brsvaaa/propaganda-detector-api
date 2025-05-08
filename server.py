@@ -275,9 +275,15 @@ def download_from_huggingface(repo_url, filename):
         logging.info(f"✔ {filename} already exists locally.")
 
 def init_models():
+    from huggingface_hub import hf_hub_download
+    try:
+        # В новых версиях может лежать в utils
+        from huggingface_hub.utils import HfHubHTTPError
+    except ImportError:
+        HfHubHTTPError = Exception
+
     models = {}
-    local_paths = {}  # сюда сохраним реальные пути к файлам
-    from huggingface_hub import hf_hub_download, HfHubHTTPError
+    local_paths = {}
     # Mapping filenames to their Hugging Face repo_ids
     hf_repos = {
         "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
@@ -302,12 +308,11 @@ def init_models():
             local_paths[filename] = path
             logging.info(f"✅ {filename} скачан в {path}")
         except HfHubHTTPError as e:
-            logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
+            logging.error(f"❌ HTTP-ошибка при скачивании {filename} из {repo_id}: {e}")
             raise
         except Exception as e:
-            logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
+            logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
             raise
-
     # 2) Загружаем vectorizer и encoder по реальным путям
     models['vectorizer.joblib'] = joblib.load(local_paths["vectorizer.joblib"])
     models['label_encoder']  = joblib.load(local_paths["label_encoder.joblib"])
