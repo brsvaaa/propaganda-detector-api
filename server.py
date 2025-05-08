@@ -236,7 +236,6 @@ import os
 # Optionally disable GPU usage:
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
 # GCS Bucket Configuration
-BUCKET_NAME = "propdetector_models"  # Replace with your actual GCS bucket name
 MODEL_DIR = "models"  # Local directory to store downloaded models
 os.makedirs(MODEL_DIR, exist_ok=True)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -277,7 +276,8 @@ def download_from_huggingface(repo_url, filename):
 def init_models():
     try:
         models = {}
-        from huggingface_hub import hf_hub_download
+        local_paths = {}  # сюда сохраним реальные пути к файлам
+        from huggingface_hub import hf_hub_download, HfHubHTTPError
         # Mapping filenames to their Hugging Face repo_ids
         hf_repos = {
             "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
@@ -290,32 +290,49 @@ def init_models():
             "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
             "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
         }
-        # Download each traditional asset from its respective repo
         for filename, repo_id in hf_repos.items():
-            local_path = hf_hub_download(repo_id=repo_id, filename=filename, cache_dir=MODEL_DIR)
-            logging.info(f"✅ Downloaded {filename} from {repo_id} to {local_path}")
-        # Load traditional assets
-        models['vectorizer.joblib'] = joblib.load(os.path.join(MODEL_DIR, "vectorizer.joblib"))
-        models['label_encoder'] = joblib.load(os.path.join(MODEL_DIR, "label_encoder.joblib"))
-        # Load Keras models
-        models['keras_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "text_classification_model.keras"))
-        models['authority_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Appeal_to_Authority_model.keras"))
-        models['bandwagon_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Bandwagon_Reductio_ad_hitlerum_model.keras"))
-        models['black_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Black-and-White_Fallacy_model.keras"))
-        models['causal_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Causal_Oversimplification_model.keras"))
-        models['slogans_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Slogans_model.keras"))
-        models['thought_model'] = keras.models.load_model(os.path.join(MODEL_DIR, "Thought-terminating_Cliches_model.keras"))
-        # Load Transformers models directly by repo
-        models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("your-username/xlnet-transformer-model")
-        models['xlnet_model'] = TFAutoModelForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
-        logging.info("✅ Models loaded from Hugging Face.")
-        return models
-    except Exception as e:
-        logging.error(f"General error in init_models: {e}")
-    except Exception as e:
-        logging.error(f"General error in init_models: {e}")
-    except Exception as e:
-        logging.error("General error in init_models: " + str(e))
+        try:
+            path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+                cache_dir=MODEL_DIR,
+                repo_type="model"
+            )
+            local_paths[filename] = path
+            logging.info(f"✅ {filename} скачан в {path}")
+        except HfHubHTTPError as e:
+            logging.error(f"❌ Ошибка при скачивании {filename} из {repo_id}: {e}")
+            raise
+        except Exception as e:
+            logging.error(f"❌ Общая ошибка при скачивании {filename}: {e}")
+            raise
+
+    # 2) Загружаем vectorizer и encoder по реальным путям
+    models['tfidf_vectorizer'] = joblib.load(local_paths["vectorizer.joblib"])
+    models['label_encoder']  = joblib.load(local_paths["label_encoder.joblib"])
+
+    # 3) Загружаем Keras-модели
+    def load_keras_model_from(path_key):
+        p = local_paths[path_key]
+        return keras.models.load_model(p)
+
+    models['keras_model']     = load_keras_model_from("text_classification_model.keras")
+    models['authority_model'] = load_keras_model_from("Appeal_to_Authority_model.keras")
+    models['bandwagon_model'] = load_keras_model_from("Bandwagon_Reductio_ad_hitlerum_model.keras")
+    models['black_model']     = load_keras_model_from("Black-and-White_Fallacy_model.keras")
+    models['causal_model']    = load_keras_model_from("Causal_Oversimplification_model.keras")
+    models['slogans_model']   = load_keras_model_from("Slogans_model.keras")
+    models['thought_model']   = load_keras_model_from("Thought-terminating_Cliches_model.keras")
+
+    # 4) Загружаем XLNet-трансформер
+    models['xlnet_tokenizer'] = XLNetTokenizer.from_pretrained("brsvaaa/xlnet_trained_model")
+    models['xlnet_model']     = TFAutoModelForSequenceClassification.from_pretrained(
+        "brsvaaa/xlnet_trained_model",
+        cache_dir=MODEL_DIR
+    )
+
+    logging.info("✅ Все модели загружены!")
+    return models
 
 def get_models():
     if 'models' not in g:
