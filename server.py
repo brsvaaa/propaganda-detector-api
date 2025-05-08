@@ -309,7 +309,7 @@ def init_models():
                 raise
 
     # 2) Загружаем vectorizer и encoder по реальным путям
-    models['tfidf_vectorizer'] = joblib.load(local_paths["vectorizer.joblib"])
+    models['vectorizer.joblib'] = joblib.load(local_paths["vectorizer.joblib"])
     models['label_encoder']  = joblib.load(local_paths["label_encoder.joblib"])
 
     # 3) Загружаем Keras-модели
