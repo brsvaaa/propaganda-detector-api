@@ -576,15 +576,22 @@ def split_sentences(text: str):
 
 def predict_xlnet(text: str):
     m = get_models()
-    tok = m['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True)
+    tok = m['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True, max_length=512)
     tok = {k: v.to(m['xlnet_mc'].device) for k, v in tok.items()}
     with torch.no_grad():
         logits = m['xlnet_mc'](**tok).logits
     return F.softmax(logits, dim=1).cpu().numpy()
 
+def pad_to_expected(x, target_dim=15396):
+    current = x.shape[1]
+    if current < target_dim:
+        return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
+    return x[:, :target_dim]
+    
 def predict_keras_mc(text: str):
     m = get_models()
     vec = m['tfidf'].transform([text]).toarray()
+    vec = pad_to_expected(vec, 15396)
     return m['mc_keras'].predict(vec)
 
 def ensemble_multiclass_predict(text: str):
@@ -597,7 +604,15 @@ def ensemble_multiclass_predict(text: str):
 # ========== Flask-эндпоинты ==========
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify(message="Propaganda Detector API"), 200
+    # For a simple JSON response:
+    return jsonify({
+        "service": "Propaganda Detector API",
+        "version": "1.0",
+        "endpoints": {
+            "health": "/health",
+            "predict": "/predict (POST)"
+        }
+    }), 200
 
 @app.route('/health', methods=['GET'])
 def health():
