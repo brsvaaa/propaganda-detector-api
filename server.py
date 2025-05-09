@@ -504,6 +504,8 @@ class CustomInputLayer(InputLayer):
             kwargs['input_shape'] = tuple(batch_shape[1:])
         super().__init__(**kwargs)
 
+MODELS = None
+
 # ========== Предзагрузка моделей ==========
 def init_models():
     logging.info("⏳ Загрузка моделей…")
@@ -560,24 +562,30 @@ def init_models():
     logging.info("✅ Все модели загружены успешно.")
     return models
 
-MODELS = init_models()
+def get_models():
+    global MODELS
+    if MODELS is None:
+        MODELS = init_models()
+    return MODELS
 
 # ========== Утилиты предсказания ==========
 def split_sentences(text: str):
-    doc = MODELS['nlp'](text)
+    nlp = get_models()['nlp']
+    doc = nlp(text)
     return [sent.text.strip() for sent in doc.sents]
 
 def predict_xlnet(text: str):
-    tok = MODELS['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True)
-    tok = {k: v.to(MODELS['xlnet_mc'].device) for k,v in tok.items()}
+    m = get_models()
+    tok = m['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True)
+    tok = {k: v.to(m['xlnet_mc'].device) for k, v in tok.items()}
     with torch.no_grad():
-        logits = MODELS['xlnet_mc'](**tok).logits
-    probs = F.softmax(logits, dim=1).cpu().numpy()
-    return probs
+        logits = m['xlnet_mc'](**tok).logits
+    return F.softmax(logits, dim=1).cpu().numpy()
 
 def predict_keras_mc(text: str):
-    vec = MODELS['tfidf'].transform([text]).toarray()
-    return MODELS['mc_keras'].predict(vec)
+    m = get_models()
+    vec = m['tfidf'].transform([text]).toarray()
+    return m['mc_keras'].predict(vec)
 
 def ensemble_multiclass_predict(text: str):
     p1 = predict_xlnet(text)
@@ -587,6 +595,10 @@ def ensemble_multiclass_predict(text: str):
     return cls, avg
 
 # ========== Flask-эндпоинты ==========
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify(message="Propaganda Detector API"), 200
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify(status="ok"), 200
