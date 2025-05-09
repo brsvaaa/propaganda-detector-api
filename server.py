@@ -466,6 +466,7 @@ if __name__ == '__main__':
 
 # server.py
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import logging
 import urllib.request
 
@@ -486,6 +487,7 @@ from keras.models import load_model
 
 from huggingface_hub import hf_hub_download
 
+
 # ========== Настройки ==========
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
@@ -493,7 +495,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-CORS(app, resources={r"/predict": {"origins": "*"}})
+CORS(app)
 
 # ========== Патч для InputLayer ==========
 class CustomInputLayer(InputLayer):
@@ -619,7 +621,8 @@ def index():
 def health():
     return jsonify(status="ok"), 200
 
-@app.route('/predict', methods=['POST', 'OPTIONS'])
+@app.route('/predict', methods=['POST','OPTIONS'])
+@cross_origin(origins='*')
 def predict():
     if request.method == 'OPTIONS':
         return jsonify(message='OK'), 200
