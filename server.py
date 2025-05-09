@@ -582,7 +582,7 @@ def predict_xlnet(text: str):
         logits = m['xlnet_mc'](**tok).logits
     return F.softmax(logits, dim=1).cpu().numpy()
 
-def pad_to_expected(x, target_dim=15396):
+def pad_to_expected(x: np.ndarray, target_dim: int):
     current = x.shape[1]
     if current < target_dim:
         return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
@@ -591,7 +591,8 @@ def pad_to_expected(x, target_dim=15396):
 def predict_keras_mc(text: str):
     m = get_models()
     vec = m['tfidf'].transform([text]).toarray()
-    vec = pad_to_expected(vec, 15396)
+    expected = m['mc_keras'].input_shape[-1]
+    vec = pad_to_expected(vec, expected)
     return m['mc_keras'].predict(vec)
 
 def ensemble_multiclass_predict(text: str):
