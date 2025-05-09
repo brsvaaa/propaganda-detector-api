@@ -230,7 +230,7 @@ if __name__ == '__main__':
     logging.info("Starting server on port: " + str(port))
     app.run(host='0.0.0.0', port=port)
 '''
-
+'''
 # Импорт библиотек
 import os
 # Optionally disable GPU usage:
@@ -461,4 +461,160 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     logging.info("Starting server on port: " + str(port))
     app.run(host='0.0.0.0', port=port)
+'''
+
+
+# server.py
+import os
+import logging
+import urllib.request
+
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+import spacy
+import numpy as np
+import joblib
+
+import torch
+import torch.nn.functional as F
+from transformers import XLNetTokenizer, XLNetForSequenceClassification
+
+import keras
+from keras.layers import InputLayer
+from keras.models import load_model
+
+from huggingface_hub import hf_hub_download
+
+# ========== Настройки ==========
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+CORS(app, resources={r"/predict": {"origins": "*"}})
+
+# ========== Патч для InputLayer ==========
+class CustomInputLayer(InputLayer):
+    def __init__(self, **kwargs):
+        batch_shape = kwargs.pop('batch_shape', None)
+        if batch_shape is not None:
+            # Убираем batch_shape и ставим input_shape = (dims...,)
+            kwargs['input_shape'] = tuple(batch_shape[1:])
+        super().__init__(**kwargs)
+
+# ========== Предзагрузка моделей ==========
+def init_models():
+    logging.info("⏳ Загрузка моделей…")
+
+    # 1) Скачиваем все `.keras` и статические файлы из HF
+    hf_repos = {
+        "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
+        "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
+        "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
+        "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
+        "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
+    }
+    local = {}
+    for fname, repo in hf_repos.items():
+        path = hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR, repo_type="model")
+        local[fname] = path
+        logging.info(f"✅ {fname} скачан в {path}")
+
+    models = {}
+    # 2) TF-IDF + LabelEncoder
+    models['tfidf'] = joblib.load(local["vectorizer.joblib"])
+    models['le']    = joblib.load(local["label_encoder.joblib"])
+
+    # 3) Keras-модели
+    def load_keras(key):
+        return load_model(
+            local[key],
+            custom_objects={
+                'Functional': keras.models.Model,
+                'InputLayer': CustomInputLayer
+            },
+            compile=False
+        )
+
+    models['mc_keras']    = load_keras("text_classification_model.keras")
+    models['bin_auth']    = load_keras("Appeal_to_Authority_model.keras")
+    models['bin_band']    = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
+    models['bin_bwfall']  = load_keras("Black-and-White_Fallacy_model.keras")
+    models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras")
+    models['bin_slog']    = load_keras("Slogans_model.keras")
+    models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
+
+    # 4) XLNet через PyTorch
+    models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+    models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
+
+    # 5) spaCy
+    models['nlp'] = spacy.load("en_core_web_sm")
+
+    logging.info("✅ Все модели загружены успешно.")
+    return models
+
+MODELS = init_models()
+
+# ========== Утилиты предсказания ==========
+def split_sentences(text: str):
+    doc = MODELS['nlp'](text)
+    return [sent.text.strip() for sent in doc.sents]
+
+def predict_xlnet(text: str):
+    tok = MODELS['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True)
+    tok = {k: v.to(MODELS['xlnet_mc'].device) for k,v in tok.items()}
+    with torch.no_grad():
+        logits = MODELS['xlnet_mc'](**tok).logits
+    probs = F.softmax(logits, dim=1).cpu().numpy()
+    return probs
+
+def predict_keras_mc(text: str):
+    vec = MODELS['tfidf'].transform([text]).toarray()
+    return MODELS['mc_keras'].predict(vec)
+
+def ensemble_multiclass_predict(text: str):
+    p1 = predict_xlnet(text)
+    p2 = predict_keras_mc(text)
+    avg = (p1 + p2) / 2
+    cls = int(np.argmax(avg, axis=1)[0])
+    return cls, avg
+
+# ========== Flask-эндпоинты ==========
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify(status="ok"), 200
+
+@app.route('/predict', methods=['POST', 'OPTIONS'])
+def predict():
+    if request.method == 'OPTIONS':
+        return jsonify(message='OK'), 200
+
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify(error="No text provided"), 400
+
+    sentences = split_sentences(text)
+    results = []
+    for s in sentences:
+        cls, _ = ensemble_multiclass_predict(s)
+        results.append({
+            "sentence": s,
+            "Multiclass_Prediction": cls
+        })
+
+    return jsonify(results=results), 200
+
+if __name__ == '__main__':
+    port = int(os.getenv("PORT", 5000))
+    logging.info(f"Запуск на порту {port}")
+    app.run(host='0.0.0.0', port=port)
+
 
