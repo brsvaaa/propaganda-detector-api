@@ -599,13 +599,10 @@ def predict_keras_mc(text: str):
 
 def predict_binary_label(text: str):
     m = get_models()
-    # Общий_vect для всех бинарных моделей
-    vec = m['tfidf'].transform([text]).toarray()
-    # подгоняем размер вектора под вход (тот же в mc_keras)
-    expected = m['mc_keras'].input_shape[-1]
-    vec = pad_to_expected(vec, expected)
+    # Сначала получаем «сырой» вектор TF-IDF
+    raw_vec = m['tfidf'].transform([text]).toarray()
 
-    # Список пар: (ключ_модели, индекс_техники)
+    # Перечень бинарных моделей + их индексов
     binary_models = [
         ('bin_auth',   0),   # Appeal to Authority
         ('bin_band',   2),   # Bandwagon / Reductio ad Hitlerum
@@ -616,12 +613,22 @@ def predict_binary_label(text: str):
     ]
 
     for model_key, label_idx in binary_models:
-        prob = m[model_key].predict(vec)
-        # у бинарки обычно shape (1,1) или (1,2):
-        if prob.ndim == 2 and prob.shape[1] == 2:
-            score = prob[0,1]  # вероятность класса “1”
+        model = m[model_key]
+        # Выясняем, какой размер входного слоя у этой бинарки
+        expected = model.input_shape[-1]
+        # Подгоняем наш raw_vec под эту длину
+        if raw_vec.shape[1] < expected:
+            vec = np.hstack([raw_vec, np.zeros((raw_vec.shape[0], expected - raw_vec.shape[1]))])
         else:
-            score = prob[0,0]  # если один выход с sigmoid
+            vec = raw_vec[:, :expected]
+
+        # Делаем предсказание
+        prob = model.predict(vec)
+        # Интерпретируем выход (два нейрона? или один?)
+        if prob.ndim == 2 and prob.shape[1] == 2:
+            score = float(prob[0, 1])
+        else:
+            score = float(prob[0, 0])
         if score > 0.5:
             return label_idx
 
