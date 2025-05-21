@@ -597,12 +597,48 @@ def predict_keras_mc(text: str):
     vec = pad_to_expected(vec, expected)
     return m['mc_keras'].predict(vec)
 
+def predict_binary_label(text: str):
+    m = get_models()
+    # Общий_vect для всех бинарных моделей
+    vec = m['tfidf'].transform([text]).toarray()
+    # подгоняем размер вектора под вход (тот же в mc_keras)
+    expected = m['mc_keras'].input_shape[-1]
+    vec = pad_to_expected(vec, expected)
+
+    # Список пар: (ключ_модели, индекс_техники)
+    binary_models = [
+        ('bin_auth',   0),   # Appeal to Authority
+        ('bin_band',   2),   # Bandwagon / Reductio ad Hitlerum
+        ('bin_bwfall', 3),   # Black-and-White Fallacy
+        ('bin_causal', 4),   # Causal Oversimplification
+        ('bin_slog',  12),   # Slogans
+        ('bin_thou',  13),   # Thought-terminating Cliches
+    ]
+
+    for model_key, label_idx in binary_models:
+        prob = m[model_key].predict(vec)
+        # у бинарки обычно shape (1,1) или (1,2):
+        if prob.ndim == 2 and prob.shape[1] == 2:
+            score = prob[0,1]  # вероятность класса “1”
+        else:
+            score = prob[0,0]  # если один выход с sigmoid
+        if score > 0.5:
+            return label_idx
+
+    return None
+    
 def ensemble_multiclass_predict(text: str):
+    bin_idx = predict_binary_label(text)
+    if bin_idx is not None:
+        # Если бинарная модель "нашла" технику — сразу её и возвращаем
+        return bin_idx, None
+    
     p1 = predict_xlnet(text)
     p2 = predict_keras_mc(text)
     avg = (p1 + p2) / 2
     cls = int(np.argmax(avg, axis=1)[0])
     return cls, avg
+
 
 # ========== Flask-эндпоинты ==========
 @app.route('/', methods=['GET'])
