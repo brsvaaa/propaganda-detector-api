@@ -310,22 +310,18 @@ def init_models():
             },
             compile=False
         )
-        # CHANGED: заранее компилируем функцию predict
-        model.make_predict_function()
-
-        # CHANGED: обёртка predict_on_batch с reduce_retracing=True
-        model.predict_on_batch = tf.function(
-            model.predict_on_batch,
-            reduce_retracing=True,
-            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)]
-        )
-        # CHANGED: если используете .predict где-то, оберните и его
-        model.predict = tf.function(
-            model.predict,
-            reduce_retracing=True,
-            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)]
-        )
-        # CHANGED: теперь возвращаем уже модифицированную модель
+        # CHANGED: определяем свой tf.function только вокруг чистого вызова model.call
+         @tf.function(
+             input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
+             reduce_retracing=True
+         )
+         def infer(x):
+             # возвращает тензор (в графе), после выхода из tf.function мы можем вызывать .numpy()
+             return model(x, training=False)
+ 
+         # CHANGED: сохраняем обёртку и стандартный predict
+         model._inference_fn = infer
+         model.make_predict_function()  # на всякий случай
         return model
         
     # сразу загружаем все Keras-модели через одну функцию
@@ -394,8 +390,9 @@ def predict_keras_batch(sentences):
         X = np.hstack([X, np.zeros((X.shape[0], D1-X.shape[1]))])
     else:
         X = X[:, :D1]
-    # 3) один вызов predict
-    return m['mc_keras'].predict_on_batch(X)
+    # CHANGED: вызываем нашу обёртку, затем .numpy()
+     preds = m['mc_keras']._inference_fn(tf.constant(X))
+     return preds.numpy()
 
 def predict_binary_batch(sentences):
     m = get_models()
@@ -417,7 +414,7 @@ def predict_binary_batch(sentences):
             X = np.hstack([raw, np.zeros((raw.shape[0], D_bin-raw.shape[1]))])
         else:
             X = raw[:, :D_bin]
-        probs = model.predict_on_batch(X)        # извлечём вероятность класса «1» для всех N
+        probs = model._inference_fn(tf.constant(X)).numpy()        # извлечём вероятность класса «1» для всех N
         if probs.ndim==2 and probs.shape[1]==2:
             scores = probs[:,1]
         else:
