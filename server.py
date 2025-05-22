@@ -388,8 +388,10 @@ def predict_keras_batch(sentences):
         X = np.hstack([X, np.zeros((X.shape[0], D1-X.shape[1]))])
     else:
         X = X[:, :D1]
+
+    X = X.astype(np.float32)
     # CHANGED: вызываем нашу обёртку, затем .numpy()
-    preds = m['mc_keras']._inference_fn(tf.constant(X))
+    preds = m['mc_keras']._inference_fn(tf.constant(X, dtype=tf.float32))
     return preds.numpy()
 
 def predict_binary_batch(sentences):
@@ -412,7 +414,9 @@ def predict_binary_batch(sentences):
             X = np.hstack([raw, np.zeros((raw.shape[0], D_bin-raw.shape[1]))])
         else:
             X = raw[:, :D_bin]
-        probs = model._inference_fn(tf.constant(X)).numpy()        # извлечём вероятность класса «1» для всех N
+
+        X = X.astype(np.float32)
+        probs = model._inference_fn(tf.constant(X, dtype=tf.float32)).numpy()        # извлечём вероятность класса «1» для всех N
         if probs.ndim==2 and probs.shape[1]==2:
             scores = probs[:,1]
         else:
