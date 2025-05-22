@@ -311,17 +311,17 @@ def init_models():
             compile=False
         )
         # CHANGED: определяем свой tf.function только вокруг чистого вызова model.call
-         @tf.function(
-             input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
-             reduce_retracing=True
-         )
-         def infer(x):
+        @tf.function(
+            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
+            reduce_retracing=True
+        )
+        def infer(x):
              # возвращает тензор (в графе), после выхода из tf.function мы можем вызывать .numpy()
-             return model(x, training=False)
+            return model(x, training=False)
  
          # CHANGED: сохраняем обёртку и стандартный predict
-         model._inference_fn = infer
-         model.make_predict_function()  # на всякий случай
+        model._inference_fn = infer
+        model.make_predict_function()  # на всякий случай
         return model
         
     # сразу загружаем все Keras-модели через одну функцию
