@@ -249,6 +249,7 @@ from keras.layers import InputLayer
 from keras.models import load_model
 
 from huggingface_hub import hf_hub_download
+import tensorflow as tf  # CHANGED: добавлен импорт tensorflow
 
 
 # ========== Настройки ==========
@@ -300,7 +301,8 @@ def init_models():
 
     # 3) Keras-модели
     def load_keras(key):
-        return load_model(
+        # CHANGED: сначала сохраняем в переменную, не возвращаем сразу
+        model = load_model(
             local[key],
             custom_objects={
                 'Functional': keras.models.Model,
@@ -308,34 +310,33 @@ def init_models():
             },
             compile=False
         )
+        # CHANGED: заранее компилируем функцию predict
+        model.make_predict_function()
 
-    k = load_keras("text_classification_model.keras")
-    k.make_predict_function()
-    models['mc_keras']    = k
+        # CHANGED: обёртка predict_on_batch с reduce_retracing=True
+        model.predict_on_batch = tf.function(
+            model.predict_on_batch,
+            reduce_retracing=True,
+            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)]
+        )
+        # CHANGED: если используете .predict где-то, оберните и его
+        model.predict = tf.function(
+            model.predict,
+            reduce_retracing=True,
+            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)]
+        )
+        # CHANGED: теперь возвращаем уже модифицированную модель
+        return model
+        
+    # сразу загружаем все Keras-модели через одну функцию
+    models['mc_keras']    = load_keras("text_classification_model.keras")
+    models['bin_auth']    = load_keras("Appeal_to_Authority_model.keras")
+    models['bin_band']    = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
+    models['bin_bwfall']  = load_keras("Black-and-White_Fallacy_model.keras")
+    models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras")
+    models['bin_slog']    = load_keras("Slogans_model.keras")
+    models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
 
-    b = load_keras("Appeal_to_Authority_model.keras")
-    b.make_predict_function()
-    models['bin_auth']    = b
-
-    b = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
-    b.make_predict_function()
-    models['bin_band']    = b
-    
-    b = load_keras("Black-and-White_Fallacy_model.keras")
-    b.make_predict_function()
-    models['bin_bwfall']  = b
-    
-    b = load_keras("Causal_Oversimplification_model.keras")
-    b.make_predict_function()
-    models['bin_causal']  = b
-
-    b = load_keras("Slogans_model.keras")
-    b.make_predict_function()
-    models['bin_slog']    = b
-    
-    b = load_keras("Thought-terminating_Cliches_model.keras")
-    b.make_predict_function()
-    models['bin_thou']    = b
     
     # 4) XLNet через PyTorch
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
