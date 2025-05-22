@@ -316,10 +316,8 @@ def init_models():
             reduce_retracing=True
         )
         def infer(x):
-             # возвращает тензор (в графе), после выхода из tf.function мы можем вызывать .numpy()
             return model(x, training=False)
  
-         # CHANGED: сохраняем обёртку и стандартный predict
         model._inference_fn = infer
         model.make_predict_function()  # на всякий случай
         return model
@@ -391,8 +389,8 @@ def predict_keras_batch(sentences):
     else:
         X = X[:, :D1]
     # CHANGED: вызываем нашу обёртку, затем .numpy()
-     preds = m['mc_keras']._inference_fn(tf.constant(X))
-     return preds.numpy()
+    preds = m['mc_keras']._inference_fn(tf.constant(X))
+    return preds.numpy()
 
 def predict_binary_batch(sentences):
     m = get_models()
