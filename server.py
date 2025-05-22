@@ -310,16 +310,20 @@ def init_models():
             },
             compile=False
         )
-        # CHANGED: определяем свой tf.function только вокруг чистого вызова model.call
+        # CHANGED: определяем tf.function один раз и сразу прогреваем его на dummy-данных
         @tf.function(
             input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
-            reduce_retracing=True
+            reduce_retracing=True,
+            experimental_relax_shapes=True
         )
         def infer(x):
             return model(x, training=False)
- 
+
+        # PROLOG: «прогреваем» graph одним вызовом с нулевым батчем
+        dummy = tf.zeros([1, model.input_shape[-1]], dtype=tf.float32)
+        _ = infer(dummy)
+
         model._inference_fn = infer
-        model.make_predict_function()  # на всякий случай
         return model
         
     # сразу загружаем все Keras-модели через одну функцию
@@ -390,8 +394,7 @@ def predict_keras_batch(sentences):
         X = X[:, :D1]
 
     X = X.astype(np.float32)
-    # CHANGED: вызываем нашу обёртку, затем .numpy()
-    preds = m['mc_keras']._inference_fn(tf.constant(X, dtype=tf.float32))
+    preds = m['mc_keras']._inference_fn(tf.constant(X))
     return preds.numpy()
 
 def predict_binary_batch(sentences):
@@ -416,7 +419,7 @@ def predict_binary_batch(sentences):
             X = raw[:, :D_bin]
 
         X = X.astype(np.float32)
-        probs = model._inference_fn(tf.constant(X, dtype=tf.float32)).numpy()        # извлечём вероятность класса «1» для всех N
+        probs = model._inference_fn(tf.constant(X)).numpy()
         if probs.ndim==2 and probs.shape[1]==2:
             scores = probs[:,1]
         else:
