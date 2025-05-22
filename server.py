@@ -309,14 +309,34 @@ def init_models():
             compile=False
         )
 
-    models['mc_keras']    = load_keras("text_classification_model.keras")
-    models['bin_auth']    = load_keras("Appeal_to_Authority_model.keras")
-    models['bin_band']    = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
-    models['bin_bwfall']  = load_keras("Black-and-White_Fallacy_model.keras")
-    models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras")
-    models['bin_slog']    = load_keras("Slogans_model.keras")
-    models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
+    k = load_keras("text_classification_model.keras")
+    k.make_predict_function()
+    models['mc_keras']    = k
 
+    b = load_keras("Appeal_to_Authority_model.keras")
+    b.make_predict_function()
+    models['bin_auth']    = b
+
+    b = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
+    b.make_predict_function()
+    models['bin_band']    = b
+    
+    b = load_keras("Black-and-White_Fallacy_model.keras")
+    b.make_predict_function()
+    models['bin_bwfall']  = b
+    
+    b = load_keras("Causal_Oversimplification_model.keras")
+    b.make_predict_function()
+    models['bin_causal']  = b
+
+    b = load_keras("Slogans_model.keras")
+    b.make_predict_function()
+    models['bin_slog']    = b
+    
+    b = load_keras("Thought-terminating_Cliches_model.keras")
+    b.make_predict_function()
+    models['bin_thou']    = b
+    
     # 4) XLNet через PyTorch
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
@@ -374,7 +394,7 @@ def predict_keras_batch(sentences):
     else:
         X = X[:, :D1]
     # 3) один вызов predict
-    return m['mc_keras'].predict(X)  # numpy array (N, C)
+    return m['mc_keras'].predict_on_batch(X)
 
 def predict_binary_batch(sentences):
     m = get_models()
@@ -396,8 +416,7 @@ def predict_binary_batch(sentences):
             X = np.hstack([raw, np.zeros((raw.shape[0], D_bin-raw.shape[1]))])
         else:
             X = raw[:, :D_bin]
-        probs = model.predict(X)  # shape (N,1) или (N,2)
-        # извлечём вероятность класса «1» для всех N
+        probs = model.predict_on_batch(X)        # извлечём вероятность класса «1» для всех N
         if probs.ndim==2 and probs.shape[1]==2:
             scores = probs[:,1]
         else:
