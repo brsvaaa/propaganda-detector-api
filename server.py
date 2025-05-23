@@ -279,7 +279,8 @@ models = {}
 binary_models = {}
 # 2) TF-IDF + LabelEncoder
 models['vectorizer'] = joblib.load(local["vectorizer.joblib"])
-models['label_encoder']    = joblib.load(local["label_encoder.joblib"])
+label_encoder = joblib.load(local["label_encoder.joblib"])
+models['label_encoder'] = label_encoder
 class_labels = list(label_encoder.classes_) 
 
 # 3) Keras-модели
