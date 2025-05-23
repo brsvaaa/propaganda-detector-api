@@ -328,12 +328,23 @@ CONF_THRESHOLD = 0.8
 # Максимальная длина последовательности (должна соответствовать обучению моделей)
 MAX_SEQ_LEN = 512  # например, 128 токенов; установить фактически используемое значение
 
+def pad_to_expected(x: np.ndarray, target_dim: int):
+    current = x.shape[1]
+    if current < target_dim:
+        return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
+    return x[:, :target_dim]
 # >>> ADDED: Компиляция (прогрев) моделей на холостом примере, чтобы избежать retracing:contentReference[oaicite:5]{index=5}
 # Создаём фиктивный батч данных для прогрева Keras моделей
-dummy_input = np.zeros((1, MAX_SEQ_LEN), dtype=np.int32)  # тип int32 для Embedding входа
-_ = models['mc_keras'](dummy_input, training=False)  # прогрев мультиклассовой модели
-for model in binary_models:
-    _ = model(dummy_input, training=False)  # прогрев каждого бинарного классификатора
+dummy_tfidf = models['vectorizer'].transform([""]).toarray()  # shape (1, D0)
+# Прогрейте мультиклассовую модель:
+mc_expected = models['mc_keras'].input_shape[-1]
+mc_dummy = pad_to_expected(dummy_tfidf, mc_expected).astype(np.float32)  # shape (1, mc_expected)
+_ = models['mc_keras'](mc_dummy, training=False)
+
+for name, bin_model in binary_models.items():
+    bin_expected = bin_model.input_shape[-1]
+    bin_dummy = pad_to_expected(dummy_tfidf, bin_expected).astype(np.float32)
+    _ = bin_model(bin_dummy, training=False)
 
 # Обёртки tf.function для Keras-моделей (чтобы выполнять инференс в графе, без retrace)
 # >>> ADDED: Определяем tf.function один раз вне цикла запросов:contentReference[oaicite:6]{index=6}
@@ -359,11 +370,7 @@ def split_to_sentences(text):
     sentences = re.split(r'(?<=[.!?]) +', text.strip())
     return [s for s in sentences if s]  # убираем пустые строки
 
-def pad_to_expected(x: np.ndarray, target_dim: int):
-    current = x.shape[1]
-    if current < target_dim:
-        return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
-    return x[:, :target_dim]
+
     
 # Функция токенизации для Keras моделей (например, на основе простого Tokenizer или словаря)
 # (Предполагается, что модели ожидают на вход последовательности токенов фиксированной длины MAX_SEQ_LEN)
