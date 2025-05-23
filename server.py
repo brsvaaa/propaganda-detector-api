@@ -272,6 +272,17 @@ class CustomInputLayer(InputLayer):
 
 MODELS = None
 
+def make_infer_fn(model):
+    @tf.function(
+        input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
+        reduce_retracing=True,
+        experimental_relax_shapes=True
+    )
+    def infer(x):
+        return model(x, training=False)
+    # PROLOG: “прогреем” граф одним вызовом
+    infer(tf.zeros([1, model.input_shape[-1]], dtype=tf.float32))
+    return infer
 # ========== Предзагрузка моделей ==========
 def init_models():
     logging.info("⏳ Загрузка моделей…")
@@ -310,20 +321,8 @@ def init_models():
             },
             compile=False
         )
-        # CHANGED: определяем tf.function один раз и сразу прогреваем его на dummy-данных
-        @tf.function(
-            input_signature=[tf.TensorSpec([None, model.input_shape[-1]], tf.float32)],
-            reduce_retracing=True,
-            experimental_relax_shapes=True
-        )
-        def infer(x):
-            return model(x, training=False)
-
-        # PROLOG: «прогреваем» graph одним вызовом с нулевым батчем
-        dummy = tf.zeros([1, model.input_shape[-1]], dtype=tf.float32)
-        _ = infer(dummy)
-
-        model._inference_fn = infer
+        
+        model._inference_fn = make_infer_fn(model)
         return model
         
     # сразу загружаем все Keras-модели через одну функцию
@@ -384,24 +383,17 @@ def pad_to_expected(x: np.ndarray, target_dim: int):
     
 def predict_keras_batch(sentences):
     m = get_models()
-    # 1) TF-IDF сразу на весь список
-    X = m['tfidf'].transform(sentences).toarray()  # shape (N, D0)
+    X = m['tfidf'].transform(sentences).toarray()
     D1 = m['mc_keras'].input_shape[-1]
-    # 2) pad/truncate всё сразу
-    if X.shape[1] < D1:
-        X = np.hstack([X, np.zeros((X.shape[0], D1-X.shape[1]))])
-    else:
-        X = X[:, :D1]
-
-    X = X.astype(np.float32)
+    X = pad_to_expected(X, D1).astype(np.float32)
+    # CHANGED: вызываем единоразово созданный _inference_fn
     preds = m['mc_keras']._inference_fn(tf.constant(X))
     return preds.numpy()
 
 def predict_binary_batch(sentences):
     m = get_models()
-    raw = m['tfidf'].transform(sentences).toarray()  # shape (N, D0)
+    raw = m['tfidf'].transform(sentences).toarray()
     results = [None]*len(sentences)
-    # для каждой бинарной модели
     for model_key, label_idx in [
         ('bin_auth',   0),
         ('bin_band',   2),
@@ -412,13 +404,8 @@ def predict_binary_batch(sentences):
     ]:
         model = m[model_key]
         D_bin = model.input_shape[-1]
-        X = raw
-        if raw.shape[1] < D_bin:
-            X = np.hstack([raw, np.zeros((raw.shape[0], D_bin-raw.shape[1]))])
-        else:
-            X = raw[:, :D_bin]
-
-        X = X.astype(np.float32)
+        X = pad_to_expected(raw, D_bin).astype(np.float32)
+        # CHANGED: ту же _inference_fn используем для бинарки
         probs = model._inference_fn(tf.constant(X)).numpy()
         if probs.ndim==2 and probs.shape[1]==2:
             scores = probs[:,1]
@@ -427,7 +414,7 @@ def predict_binary_batch(sentences):
         for i, s in enumerate(scores):
             if s>0.5 and results[i] is None:
                 results[i] = label_idx
-    return results  # list длины N, с индексами или None
+    return results
 
 def chunked_predict_xlnet(sentences, chunk_size=32):
     parts = []
@@ -448,6 +435,7 @@ def chunked_predict_binary(sentences, chunk_size=32):
     return parts
     
 def ensemble_batch(sentences):
+    N = len(sentences)
     bin_labels = chunked_predict_binary(sentences)
     mc1 = chunked_predict_xlnet(sentences)
     mc2 = chunked_predict_keras(sentences)             # (N,C)
