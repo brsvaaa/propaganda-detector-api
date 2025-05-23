@@ -255,6 +255,14 @@ CORS(app)
 
 MODELS = None
 
+class CustomInputLayer(InputLayer):
+    def __init__(self, **kwargs):
+        batch_shape = kwargs.pop('batch_shape', None)
+        if batch_shape is not None:
+            # Убираем batch_shape и ставим input_shape = (dims...,)
+            kwargs['input_shape'] = tuple(batch_shape[1:])
+        super().__init__(**kwargs)
+
 logging.info("⏳ Загрузка моделей…")
 
 # 1) Скачиваем все `.keras` и статические файлы из HF
