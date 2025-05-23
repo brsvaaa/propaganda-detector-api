@@ -335,16 +335,16 @@ def pad_to_expected(x: np.ndarray, target_dim: int):
     return x[:, :target_dim]
 # >>> ADDED: Компиляция (прогрев) моделей на холостом примере, чтобы избежать retracing:contentReference[oaicite:5]{index=5}
 # Создаём фиктивный батч данных для прогрева Keras моделей
-dummy_tfidf = models['vectorizer'].transform([""]).toarray()  # shape (1, D0)
-# Прогрейте мультиклассовую модель:
+dummy_tfidf = models['vectorizer'].transform([""]).toarray()
 mc_expected = models['mc_keras'].input_shape[-1]
-mc_dummy = pad_to_expected(dummy_tfidf, mc_expected).astype(np.float32)  # shape (1, mc_expected)
-_ = models['mc_keras'](mc_dummy, training=False)
+mc_dummy = pad_to_expected(dummy_tfidf, mc_expected).astype(np.float32)
+# прогрев через predict_on_batch (или через ваш tf.function infer_fn)
+_ = models['mc_keras'].predict_on_batch(mc_dummy)
 
 for name, bin_model in binary_models.items():
     bin_expected = bin_model.input_shape[-1]
     bin_dummy = pad_to_expected(dummy_tfidf, bin_expected).astype(np.float32)
-    _ = bin_model(bin_dummy, training=False)
+    _ = bin_model.predict_on_batch(bin_dummy)
 
 # Обёртки tf.function для Keras-моделей (чтобы выполнять инференс в графе, без retrace)
 # >>> ADDED: Определяем tf.function один раз вне цикла запросов:contentReference[oaicite:6]{index=6}
@@ -356,11 +356,7 @@ def keras_binary_batch_predict(model, batch):
 def keras_multi_batch_predict(batch):
     return models['mc_keras'](batch, training=False)
 
-def get_models():
-    global MODELS
-    if MODELS is None:
-        MODELS = init_models()
-    return MODELS
+
 # Функция предобработки текста: разбивает статью на предложения
 def split_to_sentences(text):
     # >>> CHANGED: Используем простой способ разбиения на предложения.
@@ -375,7 +371,7 @@ def split_to_sentences(text):
 # Функция токенизации для Keras моделей (например, на основе простого Tokenizer или словаря)
 # (Предполагается, что модели ожидают на вход последовательности токенов фиксированной длины MAX_SEQ_LEN)
 def tokenize_and_pad(sentences):
-    m = get_models()  # CHANGED: берём TF-IDF векторизацию из глобальных моделей
+    m = models  # CHANGED: берём TF-IDF векторизацию из глобальных моделей
     
     # CHANGED: векторизуем весь батч предложений
     vecs = m['vectorizer'].transform(sentences).toarray()
