@@ -287,9 +287,9 @@ models = {}
 binary_models = {}
 # 2) TF-IDF + LabelEncoder
 models['vectorizer'] = joblib.load(local["vectorizer.joblib"])
-label_encoder = joblib.load(local["label_encoder.joblib"])
-models['label_encoder'] = label_encoder
-class_labels = list(label_encoder.classes_) 
+models['label_encoder']  = joblib.load(local["label_encoder.joblib"])
+label_encoder = models['label_encoder']
+
 
 # 3) Keras-модели
 def load_keras(key):
@@ -310,6 +310,8 @@ binary_models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras
 binary_models['bin_slog']    = load_keras("Slogans_model.keras")
 binary_models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
 
+binary_model_names = list(binary_models.keys())
+binary_models = list(binary_models.values())
 # 4) XLNet через PyTorch
 models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
 models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
@@ -391,11 +393,10 @@ def classify_sentences(sentences):
     num_sent = X.shape[0]
 
     # >>> CHANGED: Единовременный батчевый запуск всех бинарных моделей:contentReference[oaicite:7]{index=7}
-    binary_preds = []
-    for model in binary_models:
-        # Получаем предсказания батча (например, вероятность класса "пропаганда" для каждой техники)
-        pred = keras_binary_batch_predict(model, X)
-        binary_preds.append(np.array(pred))  # приводим к numpy для последующей обработки
+    binary_preds = [
+        np.array(keras_binary_batch_predict(model, X))
+        for model in binary_models
+    ]    
 
     binary_preds = np.stack(binary_preds, axis=1).squeeze()  
     # Теперь binary_preds имеет форму (num_sent, num_binary_models) с вероятностями по каждому бинарному классификатору
@@ -404,16 +405,11 @@ def classify_sentences(sentences):
     # Инициализируем список итоговых меток None (для предложений, которые пойдут на мультиклассовую модель)
     final_labels = [None] * num_sent
 
-    for i in range(num_sent):
-        # Для предложения i находим максимальную вероятность среди бинарных моделей
-        probs = binary_preds[i]
-        max_prob = float(np.max(probs))
-        max_idx = int(np.argmax(probs))
+    for i, probs in enumerate(binary_preds):
+        max_idx  = int(np.argmax(probs))
+        max_prob = float(probs[max_idx])
         if max_prob >= CONF_THRESHOLD:
-            # Если хоть одна модель уверена, присваиваем соответствующий тег техники
             final_labels[i] = binary_model_names[max_idx]
-            # (Пропускаем мультикласс для этого предложения)
-        # иначе остаётся None, обработаем через мультиклассовые модели
 
     # Собираем предложения, которым требуется мультиклассовая классификация
     to_multi_idxs = [idx for idx, label in enumerate(final_labels) if label is None]
