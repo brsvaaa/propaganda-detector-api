@@ -428,12 +428,29 @@ def predict_binary_batch(sentences):
             if s>0.5 and results[i] is None:
                 results[i] = label_idx
     return results  # list длины N, с индексами или None
+
+def chunked_predict_xlnet(sentences, chunk_size=32):
+    parts = []
+    for i in range(0, len(sentences), chunk_size):
+        parts.append(predict_xlnet_batch(sentences[i:i+chunk_size]))
+    return np.vstack(parts)
+
+def chunked_predict_keras(sentences, chunk_size=32):
+    parts = []
+    for i in range(0, len(sentences), chunk_size):
+        parts.append(predict_keras_batch(sentences[i:i+chunk_size]))
+    return np.vstack(parts)
+
+def chunked_predict_binary(sentences, chunk_size=32):
+    parts = []
+    for i in range(0, len(sentences), chunk_size):
+        parts.extend(predict_binary_batch(sentences[i:i+chunk_size]))
+    return parts
     
 def ensemble_batch(sentences):
-    N = len(sentences)
-    bin_labels = predict_binary_batch(sentences)        # [idx_or_None]*N
-    mc1 = predict_xlnet_batch(sentences)               # (N,C)
-    mc2 = predict_keras_batch(sentences)               # (N,C)
+    bin_labels = chunked_predict_binary(sentences)
+    mc1 = chunked_predict_xlnet(sentences)
+    mc2 = chunked_predict_keras(sentences)             # (N,C)
     avg = (mc1 + mc2) / 2.0                            # (N,C)
     final = []
     for i in range(N):
