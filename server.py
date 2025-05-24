@@ -525,7 +525,7 @@ from keras.models import load_model
 
 from huggingface_hub import hf_hub_download
 
-
+CONF_THRESHOLD = 0.5
 # ========== Настройки ==========
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
