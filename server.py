@@ -524,6 +524,11 @@ from keras.layers import InputLayer
 from keras.models import load_model
 
 from huggingface_hub import hf_hub_download
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
+
+# PyTorch тоже ограничит число потоков
+torch.set_num_threads(1)
 
 CONF_THRESHOLD = 0.5
 # ========== Настройки ==========
