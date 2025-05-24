@@ -1,4 +1,4 @@
-'''
+
 # server.py
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -170,10 +170,6 @@ def predict_binary_label(text: str):
     return None
     
 def ensemble_multiclass_predict(text: str):
-    bin_idx = predict_binary_label(text)
-    if bin_idx is not None:
-        # Если бинарная модель "нашла" технику — сразу её и возвращаем
-        return bin_idx, None
     
     p1 = predict_xlnet(text)
     p2 = predict_keras_mc(text)
