@@ -289,6 +289,7 @@ binary_models = {}
 models['vectorizer'] = joblib.load(local["vectorizer.joblib"])
 models['label_encoder']  = joblib.load(local["label_encoder.joblib"])
 label_encoder = models['label_encoder']
+class_labels  = list(label_encoder.classes_)
 
 
 # 3) Keras-модели
@@ -303,20 +304,29 @@ def load_keras(key):
     )
 
 models['mc_keras']    = load_keras("text_classification_model.keras")
-binary_models['bin_auth']    = load_keras("Appeal_to_Authority_model.keras")
-binary_models['bin_band']    = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
-binary_models['bin_bwfall']  = load_keras("Black-and-White_Fallacy_model.keras")
-binary_models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras")
-binary_models['bin_slog']    = load_keras("Slogans_model.keras")
-binary_models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
-
-binary_model_names = list(binary_models.keys())
-binary_models = list(binary_models.values())
+binary_models = [
+    load_keras("Appeal_to_Authority_model.keras"),
+    load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras"),
+    load_keras("Black-and-White_Fallacy_model.keras"),
+    load_keras("Causal_Oversimplification_model.keras"),
+    load_keras("Slogans_model.keras"),
+    load_keras("Thought-terminating_Cliches_model.keras"),
+]
+binary_model_names = [
+    "Appeal_to_Authority",
+    "Bandwagon_Reductio_ad_hitlerum",
+    "Black-and-White_Fallacy",
+    "Causal_Oversimplification",
+    "Slogans",
+    "Thought-terminating_Cliches",
+]
 # 4) XLNet через PyTorch
 models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
 models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
 models['xlnet_mc'].eval()  # >>> ADDED: устанавливаем режим инференса для PyTorch модели
 
+xlnet_tokenizer = models['xlnet_tok']
+xlnet_model     = models['xlnet_mc']
 # 5) spaCy
 models['nlp'] = spacy.load("en_core_web_sm")
 
@@ -343,7 +353,8 @@ mc_dummy = pad_to_expected(dummy_tfidf, mc_expected).astype(np.float32)
 # прогрев через predict_on_batch (или через ваш tf.function infer_fn)
 _ = models['mc_keras'].predict_on_batch(mc_dummy)
 
-for name, bin_model in binary_models.items():
+for bin_model in binary_models:
+    # одинаково «прогреваем» через predict_on_batch
     bin_expected = bin_model.input_shape[-1]
     bin_dummy = pad_to_expected(dummy_tfidf, bin_expected).astype(np.float32)
     _ = bin_model.predict_on_batch(bin_dummy)
@@ -394,7 +405,7 @@ def classify_sentences(sentences):
 
     # >>> CHANGED: Единовременный батчевый запуск всех бинарных моделей:contentReference[oaicite:7]{index=7}
     binary_preds = [
-        np.array(keras_binary_batch_predict(model, X))
+        np.array(model.predict_on_batch(X.astype(np.float32)))
         for model in binary_models
     ]    
 
@@ -424,8 +435,12 @@ def classify_sentences(sentences):
         multi_preds_keras = np.array(keras_multi_batch_predict(X_multi))  # форма (batch_size, num_classes)
 
         # PyTorch XLNet мультиклассовые предсказания (батч)
-        encodings = xlnet_tokenizer(to_multi_sentences, return_tensors='pt', padding=True, truncation=True, max_length=MAX_SEQ_LEN)
-        with torch.no_grad():  # >>> ADDED: выключаем градиенты для инференса:contentReference[oaicite:8]{index=8}
+        encodings = xlnet_tokenizer(to_multi_sentences,
+                                     return_tensors='pt',
+                                     padding=True,
+                                     truncation=True,
+                                     max_length=MAX_SEQ_LEN)
+        with torch.no_grad():
             outputs = xlnet_model(**encodings)
         logits = outputs.logits  # тензор размера (batch_size, num_classes)
         multi_preds_torch = torch.softmax(logits, dim=1).cpu().numpy()
