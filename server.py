@@ -597,8 +597,9 @@ def init_models():
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
 
     # 5) spaCy
-    models['nlp'] = spacy.load("en_core_web_sm")
-
+    models['nlp'] = spacy.load("en_core_web_sm", disable=["tagger","parser","ner"])
+    models['nlp'].add_pipe("sentencizer")
+    
     logging.info("✅ Все модели загружены успешно.")
     return models
 
@@ -637,6 +638,7 @@ def pad_to_expected(x: np.ndarray, target_dim: int):
         return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
     return x[:, :target_dim]
     
+    
 def predict_keras_mc(text: str):
     m = get_models()
     vec = m['tfidf'].transform([text]).toarray()
@@ -671,6 +673,59 @@ def predict_binary_label(text: str):
             return label_idx
 
     return None
+def predict_binary_batch(sentences):
+    """Возвращает список меток или None для каждого предложения."""
+    m = get_models()
+    # 1. Векторизуем всё сразу: shape (N, D0)
+    raw = m['tfidf'].transform(sentences).toarray()
+    N = len(sentences)
+
+    # 2. Для каждой бинарной модели делаем батч
+    bin_preds = np.zeros((N, len(BINARY_MODELS)), dtype=float)
+    for j, (model_key, _) in enumerate(BINARY_MODELS):
+        model = m[model_key]
+        D = model.input_shape[-1]
+        X = pad_to_expected(raw, D)
+        probs = model.predict_on_batch(X.astype(np.float32))  # <<< CHANGED: predict_on_batch
+        # берем вероятность класса “1”
+        if probs.ndim==2 and probs.shape[1]==2:
+            bin_preds[:, j] = probs[:,1]
+        else:
+            bin_preds[:, j] = probs[:,0]
+
+    # 3. Выбираем, если >0.5
+    labels = [None] * N
+    for i in range(N):
+        idx = int(np.argmax(bin_preds[i]))
+        if bin_preds[i, idx] > CONF_THRESHOLD:
+            labels[i] = BINARY_MODELS[idx][1]
+    return labels
+
+
+def predict_xlnet_batch(sentences):
+    """Batched XLNet: (N,C)"""
+    m = get_models()
+    batch = m['xlnet_tok'](
+        sentences,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=512
+    )
+    batch = {k:v.to(m['xlnet_mc'].device) for k,v in batch.items()}
+    with torch.no_grad():
+        logits = m['xlnet_mc'](**batch).logits
+    return F.softmax(logits, dim=1).cpu().numpy()  # <<< CHANGED: batched
+
+
+def predict_keras_batch(sentences):
+    """Batched Keras multiclass: (N,C)"""
+    m = get_models()
+    raw = m['tfidf'].transform(sentences).toarray()
+    D = m['mc_keras'].input_shape[-1]
+    X = pad_to_expected(raw, D)
+    return m['mc_keras'].predict_on_batch(X.astype(np.float32))  # <<< CHANGED: predict_on_batch
+
     
 def ensemble_multiclass_predict(text: str):
     bin_idx = predict_binary_label(text)                # CHANGED: вызываем бинарную функцию
@@ -705,22 +760,37 @@ def health():
 @app.route('/predict', methods=['POST','OPTIONS'])
 @cross_origin(origins='*')
 def predict():
-    if request.method == 'OPTIONS':
+    if request.method=='OPTIONS':
         return jsonify(message='OK'), 200
 
     data = request.get_json(silent=True) or {}
-    text = data.get("text", "").strip()
+    text = data.get("text","").strip()
     if not text:
         return jsonify(error="No text provided"), 400
 
+    # 1) Разбиваем и делаем общий батч
     sentences = split_sentences(text)
+
+    # 2) Сначала бинарные модели
+    bin_labels = predict_binary_batch(sentences)  # [None|label_idx] * N
+
+    # 3) Для None-записей запускаем сразу оба больших батча
+    to_multi_idxs = [i for i,lab in enumerate(bin_labels) if lab is None]
+    mc_labels = [None] * len(sentences)
+    if to_multi_idxs:
+        subsent = [sentences[i] for i in to_multi_idxs]
+        xl = predict_xlnet_batch(subsent)        # (M,C)
+        kr = predict_keras_batch(subsent)        # (M,C)
+        avg = (xl + kr) / 2.0
+        preds = np.argmax(avg, axis=1)
+        for idx, cl in zip(to_multi_idxs, preds):
+            mc_labels[idx] = int(cl)
+
+    # 4) Сводим результаты
     results = []
-    for s in sentences:
-        cls, _ = ensemble_multiclass_predict(s)
-        results.append({
-            "sentence": s,
-            "Multiclass_Prediction": cls
-        })
+    for sent, b, mcl in zip(sentences, bin_labels, mc_labels):
+        label = b if b is not None else mcl
+        results.append({"sentence": sent, "Multiclass_Prediction": label})
 
     return jsonify(results=results), 200
 
