@@ -758,7 +758,7 @@ def predict():
         label = b_lbl if b_lbl is not None else m_lbl
         results.append({"sentence": sent, "Multiclass_Prediction": label})
 
-     return jsonify(results=results), 200
+    return jsonify(results=results), 200
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
