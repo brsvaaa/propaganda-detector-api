@@ -631,12 +631,14 @@ def init_models():
         out = m(x_bin, training=False)
         # выбираем вероятность «1»-го класса
         if out.shape[-1] == 2:
-            p1 = Lambda(lambda x: x[:,1], name=f"{m.name}_p1")(out)
+            p1 = Lambda(lambda x: tf.expand_dims(x[:,1], axis=-1),
+                        name=f"{m.name}_p1")(out)
         else:
-            p1 = Lambda(lambda x: x[:,0], name=f"{m.name}_p1")(out)
+            p1 = Lambda(lambda x: tf.expand_dims(x[:,0], axis=-1),
+                        name=f"{m.name}_p1")(out)
         probs.append(p1)
 
-    multi_binary = Concatenate(name="binary_probs")(probs)
+    multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
     models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
     logging.info("✅ Multi-output binary model built.")
     return models
