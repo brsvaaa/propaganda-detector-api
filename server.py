@@ -583,7 +583,7 @@ def init_models():
 
     # 3) Keras-модели
     models['mc_keras'] = load_model(
-        local[key],
+        local["text_classification_model.keras"],
         custom_objects={
             'Functional': keras.models.Model,
             'InputLayer': CustomInputLayer
