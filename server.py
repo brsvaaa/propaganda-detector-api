@@ -525,6 +525,8 @@ from keras.models import load_model
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Lambda, Concatenate
 from tensorflow.keras.models import Model, load_model
+from tensorflow.keras import mixed_precision
+mixed_precision.set_global_policy('mixed_float16')
 
 from huggingface_hub import hf_hub_download
 tf.config.threading.set_intra_op_parallelism_threads(1)
@@ -534,6 +536,7 @@ tf.config.threading.set_inter_op_parallelism_threads(1)
 torch.set_num_threads(1)
 
 CONF_THRESHOLD = 0.5
+
 # ========== Настройки ==========
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
@@ -596,6 +599,8 @@ def init_models():
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
     models['xlnet_mc'].eval()
+    if torch.cuda.is_available():
+        models['xlnet_mc'].half()
 
     # 5) spaCy
     nlp = spacy.blank("en")
@@ -682,6 +687,9 @@ def predict_xlnet_batch(sentences):
         padding=True, max_length=512
     )
     batch = {k:v.to(m['xlnet_mc'].device) for k,v in batch.items()}
+    if next(m['xlnet_mc'].parameters()).dtype == torch.float16:
+        for k in batch:
+            batch[k] = batch[k].half()
     with torch.no_grad():
         logits = m['xlnet_mc'](**batch).logits
     return F.softmax(logits, dim=1).cpu().numpy()
