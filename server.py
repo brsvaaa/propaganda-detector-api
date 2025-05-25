@@ -508,6 +508,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import logging
 import urllib.request
 
+import psutil
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
 
@@ -558,6 +560,11 @@ class CustomInputLayer(InputLayer):
 MODELS = None
 
 # ========== Предзагрузка моделей ==========
+def log_mem(msg=""):
+    pid = os.getpid()
+    mem = psutil.Process(pid).memory_info().rss / (1024**2)
+    logging.info(f"{msg} PID={pid} RAM={mem:.1f} MiB")
+    
 def init_models():
     logging.info("⏳ Загрузка моделей…")
 
@@ -714,6 +721,15 @@ def ensemble_multiclass_predict(text: str):
     return cls, avg
     
 # ========== Flask-эндпоинты ==========
+@app.before_request
+def before_request():
+    log_mem("Before")
+
+@app.after_request
+def after_request(response):
+    log_mem("After")
+    return response
+    
 @app.route('/', methods=['GET'])
 def index():
     # For a simple JSON response:
