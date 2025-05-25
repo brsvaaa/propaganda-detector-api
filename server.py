@@ -523,6 +523,8 @@ import keras
 from keras.layers import InputLayer
 from keras.models import load_model
 import tensorflow as tf
+from tensorflow.keras.layers import Input, Lambda, Concatenate
+from tensorflow.keras.models import Model, load_model
 
 from huggingface_hub import hf_hub_download
 tf.config.threading.set_intra_op_parallelism_threads(1)
@@ -580,44 +582,66 @@ def init_models():
     models['le']    = joblib.load(local["label_encoder.joblib"])
 
     # 3) Keras-модели
-    def load_keras(key):
-        return load_model(
-            local[key],
-            custom_objects={
-                'Functional': keras.models.Model,
-                'InputLayer': CustomInputLayer
-            },
-            compile=False
-        )
+    models['mc_keras'] = load_model(
+        local[key],
+        custom_objects={
+            'Functional': keras.models.Model,
+            'InputLayer': CustomInputLayer
+        },
+        compile=False
+    )
 
-    models['mc_keras']    = load_keras("text_classification_model.keras")
-    models['bin_auth']    = load_keras("Appeal_to_Authority_model.keras")
-    models['bin_band']    = load_keras("Bandwagon_Reductio_ad_hitlerum_model.keras")
-    models['bin_bwfall']  = load_keras("Black-and-White_Fallacy_model.keras")
-    models['bin_causal']  = load_keras("Causal_Oversimplification_model.keras")
-    models['bin_slog']    = load_keras("Slogans_model.keras")
-    models['bin_thou']    = load_keras("Thought-terminating_Cliches_model.keras")
-
+    
     # 4) XLNet через PyTorch
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
+    models['xlnet_mc'].eval()
 
     # 5) spaCy
     nlp = spacy.blank("en")
     nlp.add_pipe("sentencizer")
     models['nlp'] = nlp
+
+    bin_keys = [
+        "Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras",
+        "Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras",
+    ]
+
+    submodels = []
+    for fname in bin_keys:
+        m = load_model(
+            local[fname],
+            custom_objects={'InputLayer': CustomInputLayer},
+            compile=False
+        )
+        m.trainable = False
+        submodels.append(m)
     
-    logging.info("✅ Все модели загружены успешно.")
+    D0 = models['tfidf'].transform([""]).shape[1]
+    inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
+    probs = []
+    for m in submodels:
+        D_bin = m.input_shape[-1]
+        # обрезаем/слайсим вход до D_bin
+        x_bin = Lambda(lambda x, d=D_bin: x[:, :d], name=f"{m.name}_slice")(inp)
+        out = m(x_bin, training=False)
+        # выбираем вероятность «1»-го класса
+        if out.shape[-1] == 2:
+            p1 = Lambda(lambda x: x[:,1], name=f"{m.name}_p1")(out)
+        else:
+            p1 = Lambda(lambda x: x[:,0], name=f"{m.name}_p1")(out)
+        probs.append(p1)
+
+    multi_binary = Concatenate(name="binary_probs")(probs)
+    models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
+    logging.info("✅ Multi-output binary model built.")
     return models
 
-BINARY_MODELS = [
-    ('bin_auth', 0),
-    ('bin_band', 2),
-    ('bin_bwfall', 3),
-    ('bin_causal', 4),
-    ('bin_slog', 12),
-    ('bin_thou', 13),
-]
+
 
 def get_models():
     global MODELS
@@ -627,128 +651,58 @@ def get_models():
 
 # ========== Утилиты предсказания ==========
 def split_sentences(text: str):
-    nlp = get_models()['nlp']
-    doc = nlp(text)
-    return [sent.text.strip() for sent in doc.sents]
-
-def predict_xlnet(text: str):
-    m = get_models()
-    tok = m['xlnet_tok'](text, return_tensors="pt", truncation=True, padding=True, max_length=512)
-    tok = {k: v.to(m['xlnet_mc'].device) for k, v in tok.items()}
-    with torch.no_grad():
-        logits = m['xlnet_mc'](**tok).logits
-    return F.softmax(logits, dim=1).cpu().numpy()
+    return [s.text.strip() for s in get_models()['nlp'](text).sents]
 
 def pad_to_expected(x: np.ndarray, target_dim: int):
-    current = x.shape[1]
-    if current < target_dim:
-        return np.hstack([x, np.zeros((x.shape[0], target_dim-current))])
+    cur = x.shape[1]
+    if cur < target_dim:
+        return np.hstack([x, np.zeros((x.shape[0], target_dim-cur))])
     return x[:, :target_dim]
-    
-    
-def predict_keras_mc(text: str):
-    m = get_models()
-    vec = m['tfidf'].transform([text]).toarray()
-    expected = m['mc_keras'].input_shape[-1]
-    vec = pad_to_expected(vec, expected)
-    return m['mc_keras'].predict(vec)
 
-def predict_binary_label(text: str):
-    m = get_models()
-    # Сначала получаем «сырой» вектор TF-IDF
-    raw_vec = m['tfidf'].transform([text]).toarray()
-
-
-    for model_key, label_idx in BINARY_MODELS:
-        model = m[model_key]
-        # Выясняем, какой размер входного слоя у этой бинарки
-        expected = model.input_shape[-1]
-        # Подгоняем наш raw_vec под эту длину
-        if raw_vec.shape[1] < expected:
-            vec = np.hstack([raw_vec, np.zeros((raw_vec.shape[0], expected - raw_vec.shape[1]))])
-        else:
-            vec = raw_vec[:, :expected]
-
-        # Делаем предсказание
-        probs = model.predict_on_batch(vec.astype(np.float32)))
-        # Интерпретируем выход (два нейрона? или один?)
-        if prob.ndim == 2 and prob.shape[1] == 2:
-            score = float(prob[0, 1])
-        else:
-            score = float(prob[0, 0])
-        if score > 0.5:
-            return label_idx
-
-    return None
 def predict_binary_batch(sentences):
-    """Возвращает список меток или None для каждого предложения."""
     m = get_models()
-    # 1. Векторизуем всё сразу: shape (N, D0)
     raw = m['tfidf'].transform(sentences).toarray()
-    N = len(sentences)
-
-    # 2. Для каждой бинарной модели делаем батч
-    bin_preds = np.zeros((N, len(BINARY_MODELS)), dtype=float)
-    for j, (model_key, _) in enumerate(BINARY_MODELS):
-        model = m[model_key]
-        D = model.input_shape[-1]
-        X = pad_to_expected(raw, D)
-        probs = model.predict_on_batch(X)  # <<< CHANGED: predict_on_batch
-        # берем вероятность класса “1”
-        if probs.ndim==2 and probs.shape[1]==2:
-            bin_preds[:, j] = probs[:,1]
-        else:
-            bin_preds[:, j] = probs[:,0]
-
-    # 3. Выбираем, если >0.5
-    labels = [None] * N
-    for i in range(N):
-        idx = int(np.argmax(bin_preds[i]))
-        if bin_preds[i, idx] > CONF_THRESHOLD:
-            labels[i] = BINARY_MODELS[idx][1]
-    del bin_preds, raw, X
-    gc.collect()
+    D0  = raw.shape[1]
+    # подгоняем до D0 и предсказываем одной моделью
+    X = raw.astype(np.float32)
+    probs = m['multi_binary'].predict_on_batch(X)    # shape (N,7)
+    labels = [None]*len(sentences)
+    for i,row in enumerate(probs):
+        j = int(np.argmax(row))
+        if row[j] > CONF_THRESHOLD:
+            labels[i] = BINARY_MODELS[j][1]
     return labels
 
-
 def predict_xlnet_batch(sentences):
-    """Batched XLNet: (N,C)"""
     m = get_models()
     batch = m['xlnet_tok'](
-        sentences,
-        return_tensors="pt",
-        truncation=True,
-        padding=True,
-        max_length=512
+        sentences, return_tensors="pt", truncation=True,
+        padding=True, max_length=512
     )
     batch = {k:v.to(m['xlnet_mc'].device) for k,v in batch.items()}
     with torch.no_grad():
         logits = m['xlnet_mc'](**batch).logits
-    return F.softmax(logits, dim=1).cpu().numpy()  # <<< CHANGED: batched
-
+    return F.softmax(logits, dim=1).cpu().numpy()
 
 def predict_keras_batch(sentences):
-    """Batched Keras multiclass: (N,C)"""
     m = get_models()
     raw = m['tfidf'].transform(sentences).toarray()
-    D = m['mc_keras'].input_shape[-1]
-    X = pad_to_expected(raw, D)
-    return m['mc_keras'].predict_on_batch(X.astype(np.float32))  # <<< CHANGED: predict_on_batch
+    D1  = m['mc_keras'].input_shape[-1]
+    X   = pad_to_expected(raw, D1).astype(np.float32)
+    return m['mc_keras'].predict_on_batch(X)
 
-    
 def ensemble_multiclass_predict(text: str):
-    bin_idx = predict_binary_label(text)                # CHANGED: вызываем бинарную функцию
-    if bin_idx is not None:
-        # Если нашли технику – возвращаем её и пропускаем XLNet+Keras
-        return bin_idx, None 
-        
-    p1 = predict_xlnet(text)
-    p2 = predict_keras_mc(text)
-    avg = (p1 + p2) / 2
+    # сначала бинарная модель
+    bin_labels = predict_binary_batch(text)  # можно адаптировать к batch, тут на строке
+    if bin_labels is not None:
+        return bin_labels, None
+    # иначе мультиклассовые
+    p1 = predict_xlnet_batch(text)
+    p2 = predict_keras_batch(text)
+    avg = (p1 + p2)/2
     cls = int(np.argmax(avg, axis=1)[0])
     return cls, avg
-
-
+    
 # ========== Flask-эндпоинты ==========
 @app.route('/', methods=['GET'])
 def index():
@@ -779,29 +733,32 @@ def predict():
 
     # 1) Разбиваем и делаем общий батч
     sentences = split_sentences(text)
+    N = len(sentences)
 
-    # 2) Сначала бинарные модели
-    bin_labels = predict_binary_batch(sentences)  # [None|label_idx] * N
+    # 1) сначала запускаем все бинарные модели одним батчем
+    bin_labels = predict_binary_batch(sentences)  # [None | label_idx] * N
 
-    # 3) Для None-записей запускаем сразу оба больших батча
-    to_multi_idxs = [i for i,lab in enumerate(bin_labels) if lab is None]
-    mc_labels = [None] * len(sentences)
+    # 2) определяем, какие предложения «не покрыты» бинаркой
+    to_multi_idxs = [i for i, lbl in enumerate(bin_labels) if lbl is None]
+    mc_labels = [None] * N
+
     if to_multi_idxs:
         subsent = [sentences[i] for i in to_multi_idxs]
-        xl = predict_xlnet_batch(subsent)        # (M,C)
-        kr = predict_keras_batch(subsent)        # (M,C)
-        avg = (xl + kr) / 2.0
+        # 3) большие батчи для «остатка»
+        xl_probs = predict_xlnet_batch(subsent)   # (M, C)
+        kr_probs = predict_keras_batch(subsent)   # (M, C)
+        avg = (xl_probs + kr_probs) / 2.0
         preds = np.argmax(avg, axis=1)
         for idx, cl in zip(to_multi_idxs, preds):
             mc_labels[idx] = int(cl)
 
-    # 4) Сводим результаты
+    # 4) собираем окончательный ответ
     results = []
-    for sent, b, mcl in zip(sentences, bin_labels, mc_labels):
-        label = b if b is not None else mcl
+    for sent, b_lbl, m_lbl in zip(sentences, bin_labels, mc_labels):
+        label = b_lbl if b_lbl is not None else m_lbl
         results.append({"sentence": sent, "Multiclass_Prediction": label})
 
-    return jsonify(results=results), 200
+     return jsonify(results=results), 200
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
