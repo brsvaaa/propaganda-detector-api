@@ -603,8 +603,9 @@ def init_models():
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
 
     # 5) spaCy
-    models['nlp'] = spacy.load("en_core_web_sm", disable=["tagger","parser","ner"])
-    models['nlp'].add_pipe("sentencizer")
+    nlp = spacy.blank("en")
+    nlp.add_pipe("sentencizer")
+    models['nlp'] = nlp
     
     logging.info("✅ Все модели загружены успешно.")
     return models
@@ -669,7 +670,7 @@ def predict_binary_label(text: str):
             vec = raw_vec[:, :expected]
 
         # Делаем предсказание
-        prob = model.predict(vec)
+        probs = model.predict_on_batch(vec.astype(np.float32)))
         # Интерпретируем выход (два нейрона? или один?)
         if prob.ndim == 2 and prob.shape[1] == 2:
             score = float(prob[0, 1])
@@ -692,7 +693,7 @@ def predict_binary_batch(sentences):
         model = m[model_key]
         D = model.input_shape[-1]
         X = pad_to_expected(raw, D)
-        probs = model.predict_on_batch(X.astype(np.float32))  # <<< CHANGED: predict_on_batch
+        probs = model.predict_on_batch(X)  # <<< CHANGED: predict_on_batch
         # берем вероятность класса “1”
         if probs.ndim==2 and probs.shape[1]==2:
             bin_preds[:, j] = probs[:,1]
@@ -705,6 +706,8 @@ def predict_binary_batch(sentences):
         idx = int(np.argmax(bin_preds[i]))
         if bin_preds[i, idx] > CONF_THRESHOLD:
             labels[i] = BINARY_MODELS[idx][1]
+    del bin_preds, raw, X
+    gc.collect()
     return labels
 
 
