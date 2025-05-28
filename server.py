@@ -598,42 +598,67 @@ def init_models():
     models['nlp'] = nlp
 
     # вот путь, куда будем сохранять/откуда загружать готовый multi_binary:
-    multi_path = os.path.join(MODEL_DIR, "multi_binary")
+    multi_path = os.path.join(MODEL_DIR, "multi_binary.keras")
     if os.path.exists(multi_path):
-        logging.info("🔄 Загружаем готовый multi_binary…")
+        logging.info("🔄 Загружаем готовый multi_binary модель…")
         models['multi_binary'] = load_model(
             multi_path,
             custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
             compile=False
         )
     else:
-        logging.info("🔧 Собираем multi_binary из 7 подмоделей…")
-        # 1) загрузка семи бинарных .keras
+        logging.info("🔧 Собираем multi_binary из 7 бинарных моделей…")
+        # 1) Загружаем 7 бинарных .keras
         submodels = []
-        for key in ["Appeal_to_Authority_model.keras", "Bandwagon_Reductio_ad_hitlerum_model.keras", "Black-and-White_Fallacy_model.keras", "Causal_Oversimplification_model.keras", "Slogans_model.keras", "Thought-terminating_Cliches_model.keras"]:
-            m = load_model(local[key], custom_objects={'InputLayer': CustomInputLayer}, compile=False)
+        for fname in [
+            "Appeal_to_Authority_model.keras",
+            "Bandwagon_Reductio_ad_hitlerum_model.keras",
+            "Black-and-White_Fallacy_model.keras",
+            "Causal_Oversimplification_model.keras",
+            "Slogans_model.keras",
+            "Thought-terminating_Cliches_model.keras",
+        ]:
+            m = load_model(
+                local[fname],
+                custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
+                compile=False
+            )
             m.trainable = False
             submodels.append(m)
 
-        # 2) строим общий граф
+        # 2) Строим общий граф multi_binary
         D0  = models['tfidf'].transform([""]).shape[1]
-        inp = Input(shape=(D0,), dtype=tf.float32)
+        inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
         probs = []
         for m in submodels:
             D_bin = m.input_shape[-1]
-            x_bin = Lambda(lambda x, d=D_bin: x[:, :d])(inp)
+            x_bin = Lambda(lambda x, d=D_bin: x[:, :d], name=f"{m.name}_slice")(inp)
             out   = m(x_bin, training=False)
-            # берём вторую компоненту, если их две, иначе первую
-            p1 = Lambda(lambda x: tf.expand_dims(x[:,1] if x.shape[-1]==2 else x[:,0], -1))(out)
+            # если у выходного слоя 2 нейрона — берём x[:,1], иначе x[:,0]
+            if out.shape[-1] == 2:
+                p1 = Lambda(lambda x: tf.expand_dims(x[:,1], axis=-1),
+                            name=f"{m.name}_p1")(out)
+            else:
+                p1 = Lambda(lambda x: tf.expand_dims(x[:,0], axis=-1),
+                            name=f"{m.name}_p1")(out)
             probs.append(p1)
-        multi_binary = Concatenate(axis=1)(probs)
+
+        multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
         models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
 
-        # 3) сохраняем и освобождаем память
+        # 3) Сохраняем и чистим память
         models['multi_binary'].save(multi_path)
+        logging.info(f"✅ multi_binary сохранён в {multi_path}")
         del submodels
         tf.keras.backend.clear_session()
-        logging.info(f"✅ multi_binary сохранён в {multi_path}")
+
+        # 4) Загружаем обратно единственную модель
+        models['multi_binary'] = load_model(
+            multi_path,
+            custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
+            compile=False
+        )
+        logging.info("✅ multi_binary подгружен и готов к работе.")
 
     return models
 
