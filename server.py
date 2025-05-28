@@ -531,6 +531,7 @@ from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy('mixed_float16')
 
 from huggingface_hub import hf_hub_download
+keras.config.enable_unsafe_deserialization()
 tf.config.threading.set_intra_op_parallelism_threads(1)
 tf.config.threading.set_inter_op_parallelism_threads(1)
 
