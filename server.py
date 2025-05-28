@@ -610,7 +610,7 @@ def init_models():
         logging.info("🔧 Собираем multi_binary из 7 подмоделей…")
         # 1) загрузка семи бинарных .keras
         submodels = []
-        for key in ["Appeal_to_Authority_model.keras", …]:
+        for key in ["Appeal_to_Authority_model.keras", "Bandwagon_Reductio_ad_hitlerum_model.keras", "Black-and-White_Fallacy_model.keras", "Causal_Oversimplification_model.keras", "Slogans_model.keras", "Thought-terminating_Cliches_model.keras"]:
             m = load_model(local[key], custom_objects={'InputLayer': CustomInputLayer}, compile=False)
             m.trainable = False
             submodels.append(m)
