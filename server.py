@@ -764,7 +764,7 @@ def predict():
     chunk_size = 50
 
     # 1) сначала запускаем все бинарные модели одним батчем
-    or start in range(0, len(sentences), chunk_size):
+    for start in range(0, len(sentences), chunk_size):
         chunk = sentences[start:start+chunk_size]
 
         # 1) бинарные метки для этого чанка
