@@ -580,79 +580,61 @@ def init_models():
         "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
         "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
     }
-    local = {}
-    for fname, repo in hf_repos.items():
-        path = hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR, repo_type="model")
-        local[fname] = path
-        logging.info(f"✅ {fname} скачан в {path}")
+    local = { fname: hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR) 
+              for fname, repo in hf_repos.items() }
 
     models = {}
-    # 2) TF-IDF + LabelEncoder
     models['tfidf'] = joblib.load(local["vectorizer.joblib"])
     models['le']    = joblib.load(local["label_encoder.joblib"])
-
-    # 3) Keras-модели
     models['mc_keras'] = load_model(
         local["text_classification_model.keras"],
-        custom_objects={
-            'Functional': keras.models.Model,
-            'InputLayer': CustomInputLayer
-        },
+        custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
         compile=False
     )
-
-    
-    # 4) XLNet через PyTorch
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
     models['xlnet_mc'].eval()
-    if torch.cuda.is_available():
-        models['xlnet_mc'].half()
-
-    # 5) spaCy
-    nlp = spacy.blank("en")
-    nlp.add_pipe("sentencizer")
+    nlp = spacy.blank("en"); nlp.add_pipe("sentencizer")
     models['nlp'] = nlp
 
-    bin_keys = [
-        "Appeal_to_Authority_model.keras",
-        "Bandwagon_Reductio_ad_hitlerum_model.keras",
-        "Black-and-White_Fallacy_model.keras",
-        "Causal_Oversimplification_model.keras",
-        "Slogans_model.keras",
-        "Thought-terminating_Cliches_model.keras",
-    ]
-
-    submodels = []
-    for fname in bin_keys:
-        m = load_model(
-            local[fname],
-            custom_objects={'InputLayer': CustomInputLayer},
+    # вот путь, куда будем сохранять/откуда загружать готовый multi_binary:
+    multi_path = os.path.join(MODEL_DIR, "multi_binary")
+    if os.path.exists(multi_path):
+        logging.info("🔄 Загружаем готовый multi_binary…")
+        models['multi_binary'] = load_model(
+            multi_path,
+            custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
             compile=False
         )
-        m.trainable = False
-        submodels.append(m)
-    
-    D0 = models['tfidf'].transform([""]).shape[1]
-    inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
-    probs = []
-    for m in submodels:
-        D_bin = m.input_shape[-1]
-        # обрезаем/слайсим вход до D_bin
-        x_bin = Lambda(lambda x, d=D_bin: x[:, :d], name=f"{m.name}_slice")(inp)
-        out = m(x_bin, training=False)
-        # выбираем вероятность «1»-го класса
-        if out.shape[-1] == 2:
-            p1 = Lambda(lambda x: tf.expand_dims(x[:,1], axis=-1),
-                        name=f"{m.name}_p1")(out)
-        else:
-            p1 = Lambda(lambda x: tf.expand_dims(x[:,0], axis=-1),
-                        name=f"{m.name}_p1")(out)
-        probs.append(p1)
+    else:
+        logging.info("🔧 Собираем multi_binary из 7 подмоделей…")
+        # 1) загрузка семи бинарных .keras
+        submodels = []
+        for key in ["Appeal_to_Authority_model.keras", …]:
+            m = load_model(local[key], custom_objects={'InputLayer': CustomInputLayer}, compile=False)
+            m.trainable = False
+            submodels.append(m)
 
-    multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
-    models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
-    logging.info("✅ Multi-output binary model built.")
+        # 2) строим общий граф
+        D0  = models['tfidf'].transform([""]).shape[1]
+        inp = Input(shape=(D0,), dtype=tf.float32)
+        probs = []
+        for m in submodels:
+            D_bin = m.input_shape[-1]
+            x_bin = Lambda(lambda x, d=D_bin: x[:, :d])(inp)
+            out   = m(x_bin, training=False)
+            # берём вторую компоненту, если их две, иначе первую
+            p1 = Lambda(lambda x: tf.expand_dims(x[:,1] if x.shape[-1]==2 else x[:,0], -1))(out)
+            probs.append(p1)
+        multi_binary = Concatenate(axis=1)(probs)
+        models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
+
+        # 3) сохраняем и освобождаем память
+        models['multi_binary'].save(multi_path)
+        del submodels
+        tf.keras.backend.clear_session()
+        logging.info(f"✅ multi_binary сохранён в {multi_path}")
+
     return models
 
 
