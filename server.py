@@ -760,29 +760,32 @@ def predict():
     # 1) Разбиваем и делаем общий батч
     sentences = split_sentences(text)
     N = len(sentences)
+    results = []
+    chunk_size = 50
 
     # 1) сначала запускаем все бинарные модели одним батчем
-    bin_labels = predict_binary_batch(sentences)  # [None | label_idx] * N
+    or start in range(0, len(sentences), chunk_size):
+        chunk = sentences[start:start+chunk_size]
 
-    # 2) определяем, какие предложения «не покрыты» бинаркой
-    to_multi_idxs = [i for i, lbl in enumerate(bin_labels) if lbl is None]
-    mc_labels = [None] * N
+        # 1) бинарные метки для этого чанка
+        bin_labels = predict_binary_batch(chunk)  # [None|label] * len(chunk)
 
-    if to_multi_idxs:
-        subsent = [sentences[i] for i in to_multi_idxs]
-        # 3) большие батчи для «остатка»
-        xl_probs = predict_xlnet_batch(subsent)   # (M, C)
-        kr_probs = predict_keras_batch(subsent)   # (M, C)
-        avg = (xl_probs + kr_probs) / 2.0
-        preds = np.argmax(avg, axis=1)
-        for idx, cl in zip(to_multi_idxs, preds):
-            mc_labels[idx] = int(cl)
+        # 2) мультикласс только там, где bin_labels == None
+        to_multi_idx = [i for i, lbl in enumerate(bin_labels) if lbl is None]
+        mc_labels = [None] * len(chunk)
+        if to_multi_idx:
+            subsent = [chunk[i] for i in to_multi_idx]
+            xl = predict_xlnet_batch(subsent)     # (M,C)
+            kr = predict_keras_batch(subsent)     # (M,C)
+            avg = (xl + kr) / 2.0
+            preds = np.argmax(avg, axis=1)
+            for idx, cl in zip(to_multi_idx, preds):
+                mc_labels[idx] = int(cl)
 
-    # 4) собираем окончательный ответ
-    results = []
-    for sent, b_lbl, m_lbl in zip(sentences, bin_labels, mc_labels):
-        label = b_lbl if b_lbl is not None else m_lbl
-        results.append({"sentence": sent, "Multiclass_Prediction": label})
+        # 3) собираем результаты для этого чанка
+        for sent, b_lbl, m_lbl in zip(chunk, bin_labels, mc_labels):
+            label = b_lbl if b_lbl is not None else m_lbl
+            results.append({"sentence": sent, "Multiclass_Prediction": label})
 
     return jsonify(results=results), 200
 
