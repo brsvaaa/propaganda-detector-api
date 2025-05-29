@@ -530,6 +530,8 @@ from tensorflow.keras.models import Model, load_model
 from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy('mixed_float16')
 
+from flask import send_from_directory
+
 from huggingface_hub import hf_hub_download
 keras.config.enable_unsafe_deserialization()
 tf.config.threading.set_intra_op_parallelism_threads(1)
@@ -729,14 +731,9 @@ def ensemble_multiclass_predict(text: str):
     return cls, avg
     
 # ========== Flask-эндпоинты ==========
-@app.before_request
-def before_request():
-    log_mem("Before")
-
-@app.after_request
-def after_request(response):
-    log_mem("After")
-    return response
+@app.route('/download/multi_binary', methods=['GET'])
+def download_multi_binary():
+    return send_from_directory('models', 'multi_binary.keras', as_attachment=True)
     
 @app.route('/', methods=['GET'])
 def index():
