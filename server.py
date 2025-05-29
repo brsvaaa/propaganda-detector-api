@@ -542,6 +542,17 @@ torch.set_num_threads(1)
 
 CONF_THRESHOLD = 0.5
 
+def slice_input(x, d):
+    # d передаётся как аргумент, defaults=(<int>,)
+    return x[:, :d]
+
+def pick_first(x):
+    # всегда возвращаем (batch,1)
+    return tf.expand_dims(x[:, 0], axis=-1)
+
+def pick_second(x):
+    return tf.expand_dims(x[:, 1], axis=-1)
+
 # ========== Настройки ==========
 MODEL_DIR = "models"
 os.makedirs(MODEL_DIR, exist_ok=True)
@@ -561,6 +572,16 @@ class CustomInputLayer(InputLayer):
         super().__init__(**kwargs)
 
 MODELS = None
+
+BINARY_MODELS = [
+    ('Appeal_to_Authority', 0),
+    # второй выход — Bandwagon / Reductio → лейбл 2
+    ('Bandwagon', 2),
+    ('Black-and-White_Fallacy', 3),
+    ('Causal_Oversimplification', 4),
+    ('Slogans', 12),
+    ('Thought-terminating_Cliches', 13),
+]
 
 # ========== Предзагрузка моделей ==========
     
@@ -593,11 +614,18 @@ def init_models():
     nlp = spacy.blank("en"); nlp.add_pipe("sentencizer")
     models['nlp'] = nlp
 
+    
     # вот путь, куда будем сохранять/откуда загружать готовый multi_binary:
     models['multi_binary'] = load_model(
         local["multi_binary.keras"],
-        custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
-        compile=False, 
+        custom_objects={
+            'slice_input':   slice_input,
+            'pick_first':    pick_first,
+            'pick_second':   pick_second,
+            'Functional':    keras.models.Model,
+            'InputLayer':    CustomInputLayer
+        },
+        compile=False,
         safe_mode=False
     )
     logging.info("✅ Loaded multi_binary.keras successfully.")
