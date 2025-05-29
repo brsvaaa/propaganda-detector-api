@@ -665,9 +665,6 @@ def ensemble_multiclass_predict(text: str):
     return cls, avg
     
 # ========== Flask-эндпоинты ==========
-@app.route('/download/multi_binary', methods=['GET'])
-def download_multi_binary():
-    return send_from_directory('models', 'multi_binary.keras', as_attachment=True)
     
 @app.route('/', methods=['GET'])
 def index():
