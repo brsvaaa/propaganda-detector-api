@@ -529,11 +529,8 @@ from tensorflow.keras.layers import Input, Lambda, Concatenate
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy('mixed_float16')
-
 from flask import send_from_directory
-
 from huggingface_hub import hf_hub_download
-keras.config.enable_unsafe_deserialization()
 tf.config.threading.set_intra_op_parallelism_threads(1)
 tf.config.threading.set_inter_op_parallelism_threads(1)
 
@@ -541,17 +538,6 @@ tf.config.threading.set_inter_op_parallelism_threads(1)
 torch.set_num_threads(1)
 
 CONF_THRESHOLD = 0.5
-
-def slice_input(x, d):
-    # d передаётся как аргумент, defaults=(<int>,)
-    return x[:, :d]
-
-def pick_first(x):
-    # всегда возвращаем (batch,1)
-    return tf.expand_dims(x[:, 0], axis=-1)
-
-def pick_second(x):
-    return tf.expand_dims(x[:, 1], axis=-1)
 
 # ========== Настройки ==========
 MODEL_DIR = "models"
@@ -571,66 +557,118 @@ class CustomInputLayer(InputLayer):
             kwargs['input_shape'] = tuple(batch_shape[1:])
         super().__init__(**kwargs)
 
+class SliceLayer(Layer):
+    def __init__(self, d, **kwargs):
+        super().__init__(**kwargs)
+        self.d = d
+
+    def call(self, inputs):
+        return inputs[:, :self.d]
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update({'d': self.d})
+        return cfg
+
+class PickProbLayer(Layer):
+    def __init__(self, index, **kwargs):
+        super().__init__(**kwargs)
+        self.index = index
+
+    def call(self, inputs):
+        return tf.expand_dims(inputs[:, self.index], axis=-1)
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg.update({'index': self.index})
+        return cfg
+BINARY_LABELS = [0, 2, 3, 4, 12, 13]
 MODELS = None
 
-BINARY_MODELS = [
-    ('Appeal_to_Authority', 0),
-    # второй выход — Bandwagon / Reductio → лейбл 2
-    ('Bandwagon', 2),
-    ('Black-and-White_Fallacy', 3),
-    ('Causal_Oversimplification', 4),
-    ('Slogans', 12),
-    ('Thought-terminating_Cliches', 13),
-]
-
 # ========== Предзагрузка моделей ==========
-    
+
 def init_models():
     logging.info("⏳ Загрузка моделей…")
 
     # 1) Скачиваем все `.keras` и статические файлы из HF
     hf_repos = {
-        "multi_binary.keras": "brsvaaa/multi_binary.keras",
+        "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
+        "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
         "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
         "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
         "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
     }
-    local = { fname: hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR) 
-              for fname, repo in hf_repos.items() }
+    local = {}
+    for fname, repo in hf_repos.items():
+        path = hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR, repo_type="model")
+        local[fname] = path
+        logging.info(f"✅ {fname} скачан в {path}")
 
     models = {}
+    # 2) TF-IDF + LabelEncoder
     models['tfidf'] = joblib.load(local["vectorizer.joblib"])
     models['le']    = joblib.load(local["label_encoder.joblib"])
+
+    # 3) Keras-модели
     models['mc_keras'] = load_model(
         local["text_classification_model.keras"],
-        custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
+        custom_objects={
+            'Functional': keras.models.Model,
+            'InputLayer': CustomInputLayer
+        },
         compile=False
     )
+
+    
+    # 4) XLNet через PyTorch
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
     models['xlnet_mc'].eval()
     if torch.cuda.is_available():
         models['xlnet_mc'].half()
-    nlp = spacy.blank("en"); nlp.add_pipe("sentencizer")
+
+    # 5) spaCy
+    nlp = spacy.blank("en")
+    nlp.add_pipe("sentencizer")
     models['nlp'] = nlp
 
-    
-    # вот путь, куда будем сохранять/откуда загружать готовый multi_binary:
-    models['multi_binary'] = load_model(
-        local["multi_binary.keras"],
-        custom_objects={
-            'slice_input':   slice_input,
-            'pick_first':    pick_first,
-            'pick_second':   pick_second,
-            'Functional':    keras.models.Model,
-            'InputLayer':    CustomInputLayer
-        },
-        compile=False,
-        safe_mode=False
-    )
-    logging.info("✅ Loaded multi_binary.keras successfully.")
+    submodels = []
+    for key in [
+        "Appeal_to_Authority_model.keras",
+        "Bandwagon_Reductio_ad_hitlerum_model.keras",
+        "Black-and-White_Fallacy_model.keras",
+        "Causal_Oversimplification_model.keras",
+        "Slogans_model.keras",
+        "Thought-terminating_Cliches_model.keras",
+    ]:
+        sm = load_model(
+            local[key],
+            custom_objects={'InputLayer': CustomInputLayer},
+            compile=False
+        )
+        sm.trainable = False
+        submodels.append(sm)
 
-    return models
+    # строим единый multi_binary
+    D0 = m['tfidf'].transform([""]).shape[1]
+    inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
+    probs = []
+    for sm, label in zip(submodels, BINARY_LABELS):
+        D_bin = sm.input_shape[-1]
+        x_bin = SliceLayer(D_bin, name=f"{sm.name}_slice")(inp)
+        out   = sm(x_bin, training=False)
+        idx   = 1 if out.shape[-1] == 2 else 0
+        p1    = PickProbLayer(idx, name=f"{sm.name}_p1")(out)
+        probs.append(p1)
+
+    multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
+    m['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
+    logging.info("✅ Multi-output binary model built.")
+    return m
 
 
 
@@ -651,13 +689,14 @@ def pad_to_expected(x: np.ndarray, target_dim: int):
     return x[:, :target_dim]
 
 def predict_binary_batch(sentences):
-    raw = get_models()['tfidf'].transform(sentences).toarray().astype(np.float32)
-    probs = get_models()['multi_binary'].predict_on_batch(raw)  # shape (N,7)
+    m = get_models()
+    raw = m['tfidf'].transform(sentences).toarray().astype(np.float32)
+    probs = m['multi_binary'].predict_on_batch(raw)  # (N,6)
     labels = [None]*len(sentences)
-    for i, row in enumerate(probs):
+    for i,row in enumerate(probs):
         j = int(np.argmax(row))
         if row[j] > CONF_THRESHOLD:
-            labels[i] = BINARY_MODELS[j][1]
+            labels[i] = BINARY_LABELS[j]
     return labels
 
 def predict_xlnet_batch(sentences):
@@ -681,19 +720,11 @@ def predict_keras_batch(sentences):
     X   = pad_to_expected(raw, D1).astype(np.float32)
     return m['mc_keras'].predict_on_batch(X)
 
-def ensemble_multiclass_predict(text: str):
-    # сначала бинарная модель
-    bin_labels = predict_binary_batch(text)  # можно адаптировать к batch, тут на строке
-    if bin_labels is not None:
-        return bin_labels, None
-    # иначе мультиклассовые
-    p1 = predict_xlnet_batch(text)
-    p2 = predict_keras_batch(text)
-    avg = (p1 + p2)/2
-    cls = int(np.argmax(avg, axis=1)[0])
-    return cls, avg
-    
+
 # ========== Flask-эндпоинты ==========
+@app.route('/download/multi_binary.keras', methods=['GET'])
+def download_multi_binary():
+    return send_from_directory('models', 'multi_binary.keras', as_attachment=True)
     
 @app.route('/', methods=['GET'])
 def index():
@@ -714,7 +745,7 @@ def health():
 @app.route('/predict', methods=['POST','OPTIONS'])
 @cross_origin(origins='*')
 def predict():
-    if request.method=='OPTIONS':
+    if request.method == 'OPTIONS':
         return jsonify(message='OK'), 200
 
     data = request.get_json(silent=True) or {}
@@ -722,35 +753,30 @@ def predict():
     if not text:
         return jsonify(error="No text provided"), 400
 
-    # 1) Разбиваем и делаем общий батч
     sentences = split_sentences(text)
-    N = len(sentences)
     results = []
     chunk_size = 50
 
-    # 1) сначала запускаем все бинарные модели одним батчем
-    for start in range(0, len(sentences), chunk_size):
-        chunk = sentences[start:start+chunk_size]
+    for i in range(0, len(sentences), chunk_size):
+        chunk = sentences[i:i+chunk_size]
+        bin_lbls = predict_binary_batch(chunk)
+        to_multi = [j for j, lbl in enumerate(bin_lbls) if lbl is None]
+        multi_lbls = [None]*len(chunk)
 
-        # 1) бинарные метки для этого чанка
-        bin_labels = predict_binary_batch(chunk)  # [None|label] * len(chunk)
-
-        # 2) мультикласс только там, где bin_labels == None
-        to_multi_idx = [i for i, lbl in enumerate(bin_labels) if lbl is None]
-        mc_labels = [None] * len(chunk)
-        if to_multi_idx:
-            subsent = [chunk[i] for i in to_multi_idx]
-            xl = predict_xlnet_batch(subsent)     # (M,C)
-            kr = predict_keras_batch(subsent)     # (M,C)
-            avg = (xl + kr) / 2.0
+        if to_multi:
+            subs = [chunk[j] for j in to_multi]
+            xl = predict_xlnet_batch(subs)
+            kr = predict_keras_batch(subs)
+            avg = (xl + kr)/2
             preds = np.argmax(avg, axis=1)
-            for idx, cl in zip(to_multi_idx, preds):
-                mc_labels[idx] = int(cl)
+            for idx, cl in zip(to_multi, preds):
+                multi_lbls[idx] = int(cl)
 
-        # 3) собираем результаты для этого чанка
-        for sent, b_lbl, m_lbl in zip(chunk, bin_labels, mc_labels):
-            label = b_lbl if b_lbl is not None else m_lbl
-            results.append({"sentence": sent, "Multiclass_Prediction": label})
+        for sent, b, m in zip(chunk, bin_lbls, multi_lbls):
+            results.append({
+                "sentence": sent,
+                "Multiclass_Prediction": b if b is not None else m
+            })
 
     return jsonify(results=results), 200
 
