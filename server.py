@@ -597,7 +597,8 @@ def init_models():
     models['multi_binary'] = load_model(
         local["multi_binary.keras"],
         custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
-        compile=False
+        compile=False, 
+        safe_mode=False
     )
     logging.info("✅ Loaded multi_binary.keras successfully.")
 
