@@ -563,22 +563,13 @@ class CustomInputLayer(InputLayer):
 MODELS = None
 
 # ========== Предзагрузка моделей ==========
-def log_mem(msg=""):
-    pid = os.getpid()
-    mem = psutil.Process(pid).memory_info().rss / (1024**2)
-    logging.info(f"{msg} PID={pid} RAM={mem:.1f} MiB")
     
 def init_models():
     logging.info("⏳ Загрузка моделей…")
 
     # 1) Скачиваем все `.keras` и статические файлы из HF
     hf_repos = {
-        "Appeal_to_Authority_model.keras": "brsvaaa/Appeal_to_Authority_model.keras",
-        "Bandwagon_Reductio_ad_hitlerum_model.keras": "brsvaaa/Bandwagon_Reductio_ad_hitlerum_model.keras",
-        "Black-and-White_Fallacy_model.keras": "brsvaaa/Black-and-White_Fallacy_model.keras",
-        "Causal_Oversimplification_model.keras": "brsvaaa/Causal_Oversimplification_model.keras",
-        "Slogans_model.keras": "brsvaaa/Slogans_model.keras",
-        "Thought-terminating_Cliches_model.keras": "brsvaaa/Thought-terminating_Cliches_model.keras",
+        "multi_binary.keras": "brsvaaa/multi_binary.keras",
         "text_classification_model.keras": "brsvaaa/text_classification_model.keras",
         "vectorizer.joblib": "brsvaaa/vectorizer.joblib",
         "label_encoder.joblib": "brsvaaa/label_encoder.joblib"
@@ -597,71 +588,18 @@ def init_models():
     models['xlnet_tok'] = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     models['xlnet_mc']  = XLNetForSequenceClassification.from_pretrained("brsvaaa/xlnet_trained_model")
     models['xlnet_mc'].eval()
+    if torch.cuda.is_available():
+        models['xlnet_mc'].half()
     nlp = spacy.blank("en"); nlp.add_pipe("sentencizer")
     models['nlp'] = nlp
 
     # вот путь, куда будем сохранять/откуда загружать готовый multi_binary:
-    multi_path = os.path.join(MODEL_DIR, "multi_binary.keras")
-    if os.path.exists(multi_path):
-        logging.info("🔄 Загружаем готовый multi_binary модель…")
-        models['multi_binary'] = load_model(
-            multi_path,
-            custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
-            compile=False
-        )
-    else:
-        logging.info("🔧 Собираем multi_binary из 7 бинарных моделей…")
-        # 1) Загружаем 7 бинарных .keras
-        submodels = []
-        for fname in [
-            "Appeal_to_Authority_model.keras",
-            "Bandwagon_Reductio_ad_hitlerum_model.keras",
-            "Black-and-White_Fallacy_model.keras",
-            "Causal_Oversimplification_model.keras",
-            "Slogans_model.keras",
-            "Thought-terminating_Cliches_model.keras",
-        ]:
-            m = load_model(
-                local[fname],
-                custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
-                compile=False
-            )
-            m.trainable = False
-            submodels.append(m)
-
-        # 2) Строим общий граф multi_binary
-        D0  = models['tfidf'].transform([""]).shape[1]
-        inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
-        probs = []
-        for m in submodels:
-            D_bin = m.input_shape[-1]
-            x_bin = Lambda(lambda x, d=D_bin: x[:, :d], name=f"{m.name}_slice")(inp)
-            out   = m(x_bin, training=False)
-            # если у выходного слоя 2 нейрона — берём x[:,1], иначе x[:,0]
-            if out.shape[-1] == 2:
-                p1 = Lambda(lambda x: tf.expand_dims(x[:,1], axis=-1),
-                            name=f"{m.name}_p1")(out)
-            else:
-                p1 = Lambda(lambda x: tf.expand_dims(x[:,0], axis=-1),
-                            name=f"{m.name}_p1")(out)
-            probs.append(p1)
-
-        multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
-        models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
-
-        # 3) Сохраняем и чистим память
-        models['multi_binary'].save(multi_path)
-        logging.info(f"✅ multi_binary сохранён в {multi_path}")
-        del submodels
-        tf.keras.backend.clear_session()
-
-        # 4) Загружаем обратно единственную модель
-        models['multi_binary'] = load_model(
-            multi_path,
-            custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
-            compile=False
-        )
-        logging.info("✅ multi_binary подгружен и готов к работе.")
+    models['multi_binary'] = load_model(
+        local["multi_binary.keras"],
+        custom_objects={'Functional': keras.models.Model, 'InputLayer': CustomInputLayer},
+        compile=False
+    )
+    logging.info("✅ Loaded multi_binary.keras successfully.")
 
     return models
 
@@ -684,14 +622,10 @@ def pad_to_expected(x: np.ndarray, target_dim: int):
     return x[:, :target_dim]
 
 def predict_binary_batch(sentences):
-    m = get_models()
-    raw = m['tfidf'].transform(sentences).toarray()
-    D0  = raw.shape[1]
-    # подгоняем до D0 и предсказываем одной моделью
-    X = raw.astype(np.float32)
-    probs = m['multi_binary'].predict_on_batch(X)    # shape (N,7)
+    raw = get_models()['tfidf'].transform(sentences).toarray().astype(np.float32)
+    probs = get_models()['multi_binary'].predict_on_batch(raw)  # shape (N,7)
     labels = [None]*len(sentences)
-    for i,row in enumerate(probs):
+    for i, row in enumerate(probs):
         j = int(np.argmax(row))
         if row[j] > CONF_THRESHOLD:
             labels[i] = BINARY_MODELS[j][1]
