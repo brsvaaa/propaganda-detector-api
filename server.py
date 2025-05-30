@@ -654,7 +654,7 @@ def init_models():
         submodels.append(sm)
 
     # строим единый multi_binary
-    D0 = m['tfidf'].transform([""]).shape[1]
+    D0 = models['tfidf'].transform([""]).shape[1]
     inp = Input(shape=(D0,), dtype=tf.float32, name="tfidf_input")
     probs = []
     for sm, label in zip(submodels, BINARY_LABELS):
@@ -666,7 +666,7 @@ def init_models():
         probs.append(p1)
 
     multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
-    m['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
+    models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
     logging.info("✅ Multi-output binary model built.")
     return m
 
