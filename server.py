@@ -755,7 +755,7 @@ def predict():
 
     sentences = split_sentences(text)
     results = []
-    chunk_size = 50
+    chunk_size = 10
 
     for i in range(0, len(sentences), chunk_size):
         chunk = sentences[i:i+chunk_size]
