@@ -525,7 +525,7 @@ import keras
 from keras.layers import InputLayer
 from keras.models import load_model
 import tensorflow as tf
-from tensorflow.keras.layers import Input, Lambda, Concatenate
+from tensorflow.keras.layers import Input, Lambda, Concatenate, Layer
 from tensorflow.keras.models import Model, load_model
 from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy('mixed_float16')
