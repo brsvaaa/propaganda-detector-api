@@ -668,7 +668,7 @@ def init_models():
     multi_binary = Concatenate(axis=1, name="binary_probs")(probs)
     models['multi_binary'] = Model(inputs=inp, outputs=multi_binary, name="multi_binary")
     logging.info("✅ Multi-output binary model built.")
-    return m
+    return models
 
 
 
