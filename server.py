@@ -726,9 +726,9 @@ def predict_keras_batch(sentences):
 
 
 # ========== Flask-эндпоинты ==========
-@app.route('/download/multi_binary.keras', methods=['GET'])
+@app.route('/download/multi_binary', methods=['GET'])
 def download_multi_binary():
-    return send_from_directory('models', 'multi_binary.keras', as_attachment=True)
+    return send_from_directory(MODEL_DIR, 'multi_binary.keras', as_attachment=True)
     
 @app.route('/', methods=['GET'])
 def index():
