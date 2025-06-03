@@ -810,7 +810,6 @@ from transformers import XLNetTokenizer, XLNetForSequenceClassification
 
 import keras
 from keras.layers import InputLayer
-from keras.models import load_model
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Lambda, Concatenate, Layer
 from tensorflow.keras.models import Model, load_model
@@ -820,6 +819,7 @@ from flask import send_from_directory
 from huggingface_hub import hf_hub_download
 tf.config.threading.set_intra_op_parallelism_threads(1)
 tf.config.threading.set_inter_op_parallelism_threads(1)
+torch.set_num_threads(1)
 
 # PyTorch тоже ограничит число потоков
 torch.set_num_threads(1)
@@ -886,9 +886,15 @@ def init_models():
     }
     local = {}
     for fname, repo in hf_repos.items():
-        path = hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR, repo_type="model")
-        local[fname] = path
-        logging.info(f"✅ {fname} скачан в {path}")
+        try:
+            path = hf_hub_download(…)
+            local[fname] = path
+            logging.info(f"✅ {fname} скачан")
+        except Exception as e:
+            logging.error(f"❌ Не удалось скачать {fname}: {e}")
+            # можно либо аварийно завершить, либо возвратить специальный флаг
+            raise RuntimeError(f"Ошибка загрузки моделей: {e}")
+
 
     models = {}
     # 2) TF-IDF + LabelEncoder
@@ -984,9 +990,6 @@ def predict_keras_batch(sentences):
 
 
 # ========== Flask-эндпоинты ==========
-@app.route('/download/multi_binary', methods=['GET'])
-def download_multi_binary():
-    return send_from_directory(MODEL_DIR, 'multi_binary.keras', as_attachment=True)
     
 @app.route('/', methods=['GET'])
 def index():
