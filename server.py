@@ -824,7 +824,7 @@ torch.set_num_threads(1)
 # PyTorch тоже ограничит число потоков
 torch.set_num_threads(1)
 
-CONF_THRESHOLD = 0.5
+CONF_THRESHOLD = 0.3
 
 # ========== Настройки ==========
 MODEL_DIR = "models"
