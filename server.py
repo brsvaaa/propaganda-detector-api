@@ -887,7 +887,7 @@ def init_models():
     local = {}
     for fname, repo in hf_repos.items():
         try:
-            path = hf_hub_download(…)
+            path = hf_hub_download(repo_id=repo, filename=fname, cache_dir=MODEL_DIR, repo_type="model")
             local[fname] = path
             logging.info(f"✅ {fname} скачан")
         except Exception as e:
